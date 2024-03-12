@@ -3,27 +3,30 @@
 This package comes with a very hands-off approach for migrations. If you check the new migrations published in `database/migrations`, you will find something very similar to this:
 
 ```php
-use Laragear\Package\Models\Car;
+use Vendor\Package\Models\Car;
 
 return Car::migration();
 ```
 
-Worry not, the migration will still work. It has been _simplified_ for your customization.
+Worry not, the migration will still work. It has been _simplified_ for easy customization.
 
 ## Adding columns
 
-To add columns to the migration, simply use a callback with the `addColumns()` method that receives the table blueprint.
+To add columns to the migration, add a callback to the `migration()` method that receives the table blueprint.
 
 ```php
 use Illuminate\Database\Schema\Blueprint;
 use Laragear\Package\Models\Car;
 
-return Car::migration()
-    ->addColumns(function (Blueprint $table) {
-        $table->boolean('is_cool')->default(true);
-        $table->string('color');
-    });
+return Car::migration(function (Blueprint $table) {
+    $table->boolean('is_cool')->default(true);
+    $table->string('color');
+});
 ```
+
+> [!INFO]
+> 
+> If your package doesn't support additional tables, the callback never executes. Refer to the package documentation. 
 
 ## After Up & Before Down
 
@@ -44,9 +47,9 @@ return Car::migration()
 
 ### Morphs
 
-You may find yourself needing to alter the type of the morph relation created in the migration. For example, the migration will create an integer-type morph for an ULID-based User model.
+You may find yourself needing to alter the type of the morph relation created in the migration. For example, the migration will create an integer-type morph that you won't be able to attach to an ULID-based User model.
 
-To change the morph type, use the `morph...` property access preferably, or the `morph()` method with `integer`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large index names).
+To change the morph type, use the `morph...` property access preferably, or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large index names).
 
 ```php
 use Illuminate\Database\Schema\Blueprint;
@@ -59,7 +62,7 @@ return Car::migration()->morph('uuid', 'shorter_morph_index_name');
 
 ## Custom table name
 
-By default, the models use the standard model name in plural for the table name. If you want to change the table name anything else, set the table using the `$useTable` static property of each Model. You should do this on the `register()` method of your `AppServiceProvider`.
+By default, tables are set using the model name in plural. If you want to change the table name from the standard, set it using the `$useTable` static property of the target Model. You should do this on the `register()` method of your `AppServiceProvider`.
 
 ```php
 namespace App\Providers;
@@ -76,29 +79,11 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
-## Casts
-
-If you add custom columns, you will find yourself retrieving these columns as a string. To merge additional casts to the model, use the `$useCasts` static property of each of the Models. You should do this on the `register()` method of your `AppServiceProvider`.
-
-```php
-use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
-use Laragear\Package\Models\Model;
-
-class AppServiceProvider extends ServiceProvider
-{
-    public function register(): void
-    {
-        Model::$useCasts = [
-            'is_cool' => 'boolean',
-            'colors' => AsEncryptedCollection::class,
-        ];
-    }
-}
-```
-
 ### Configuring the model
 
-All customizable models can be configured with additional fillable, guarded, hidden, visible and appended attributes. These are _merged_ with the original configuration of the model itself, so changes are not destructive. Customize the model using the available static properties:
+All customizable models can be configured with additional fillable, guarded, hidden, visible and appended attributes. These are _merged_ with the original configuration of the model itself, so changes are not destructive. 
+
+Customize the model using the available static properties:
 
 - `$useCasts`: The casts attributes to merge.
 - `$useFillable`: The fillable attributes to merge.
@@ -109,16 +94,18 @@ All customizable models can be configured with additional fillable, guarded, hid
 
 ```php
 use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
-use Laragear\Package\Models\Model;
+use Vendor\Package\Models\Car;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        Model::$useCasts = [
+        Car::$useCasts = [
             'is_cool' => 'boolean',
             'colors' => AsEncryptedCollection::class,
         ];
+        
+        Car::$useHidden = ['colors'];
     }
 }
 ```
