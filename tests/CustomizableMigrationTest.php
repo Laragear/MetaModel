@@ -57,8 +57,6 @@ class CustomizableMigrationTest extends TestCase
             return true;
         });
 
-
-
         TestModel::migration()->up();
     }
 
@@ -250,5 +248,16 @@ class CustomizableMigrationTest extends TestCase
         $schema->expects('dropIfExists')->with('test_models')->once();
 
         TestModel::migration()->beforeDown(fn($table) => $table->afterDownCall())->down();
+    }
+
+    #[Test]
+    public function calls_boot_method(): void
+    {
+        $this->expectNotToPerformAssertions();
+
+        $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
+        $schema->expects('create')->with('test', m::type(Closure::class))->once();
+
+        new Fixtures\TestMigrationWithBoot(TestModel::class);
     }
 }

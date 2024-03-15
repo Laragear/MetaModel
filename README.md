@@ -165,10 +165,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Laragear\MetaModel\CustomizableMigration;
 use MyVendor\MyPackage\Models\Car;
 
-abstract class CarsMigration extends CustomizableMigration
+class CarsMigration extends CustomizableMigration
 {
-    protected static $model = Car::class;
-
     protected function create(Blueprint $table)
     {
         $table->id();
@@ -212,6 +210,43 @@ use Illuminate\Database\Schema\Blueprint;
 
 return Car::migration();
 ```
+
+### Booting 
+
+You can run custom logic when the migration is instanced using the `boot()` method. 
+
+```php
+namespace MyVendor\MyPackage\Migrations;
+
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\MetaModel\CustomizableMigration;
+use MyVendor\MyPackage\Models\Car;
+
+class CarsMigration extends CustomizableMigration
+{
+    protected function boot() : void
+    {
+        if (app()->isUnitTesting()) {
+            Car::$useConnection = env('DB_CONNECTION');        
+        }
+    }
+
+    protected function create(Blueprint $table)
+    {
+        $table->id();
+        
+        $table->string('manufacturer');
+        $table->string('model');
+        $table->tinyInteger('year');
+        
+        $table->timestamps();
+    }
+}
+```
+
+> [!CAUTION]
+> 
+> The `boot()` method runs every time the migration is instanced. Ensure the method effects are idempotent when required.
 
 ### Adding Custom Columns
 
