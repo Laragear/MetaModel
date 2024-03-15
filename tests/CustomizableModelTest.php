@@ -10,20 +10,34 @@ class CustomizableModelTest extends TestCase
 {
     protected function setUp(): void
     {
+        TestModel::$useConnection = null;
         TestModel::$useTable = null;
         TestModel::$useCasts = [];
         TestModel::$useFillable = [];
         TestModel::$useGuarded = [];
         TestModel::$useHidden = [];
         TestModel::$useVisible = [];
+        TestModel::$useAppends = [];
+    }
+
+    #[Test]
+    public function uses_default_connection(): void
+    {
+        static::assertNull((new TestModel())->getConnectionName());
+    }
+
+    #[Test]
+    public function uses_custom_connection(): void
+    {
+        TestModel::$useConnection = 'foo';
+
+        static::assertSame('foo', (new TestModel())->getConnectionName());
     }
 
     #[Test]
     public function uses_default_table_name(): void
     {
-        TestModel::$useTable = 'foo';
-
-        static::assertSame('foo', (new TestModel())->getTable());
+        static::assertSame('test_models', (new TestModel())->getTable());
     }
 
     #[Test]
