@@ -206,6 +206,10 @@ return Car::migration(function (Blueprint $table) {
 
 ### Morphs
 
+> [!CAUTION]
+> 
+> Morphs are only supported for a single relation. It's highly discouraged multiple morphs relations on one table. 
+
 If your migration requires morph relationships, you will find that end-developers won't always have the same key type in their application. This problem can be fixed by using the `createMorph()` or `createNullableMorph()` method with the `Blueprint` instance and the name of the morph type.
 
 ```php
@@ -227,10 +231,32 @@ This will let the end-developer to change the morph type through the `morph()` m
 
 ```php
 use MyVendor\MyPackage\Models\Car;
-use Illuminate\Database\Schema\Blueprint;
 
 return Car::migration()->morph('ulid', 'custom_index_name');
 ```
+
+#### Default index name
+
+You may also set a custom index name for the morph. It will be used as a default, unless the user overrides it manually.
+
+```php
+protected function create(Blueprint $table)
+{
+    $this->createMorphRelation($table, 'ownable', 'ownable_table_index');
+    
+    // ...
+}
+```
+
+```php
+use MyVendor\MyPackage\Models\Car;
+
+// Uses "custom_index_name" as index name
+return Car::migration()->morph('ulid', 'custom_index_name');
+
+// Uses "ownable_table_index" as index name
+return Car::migration()->morph('ulid');
+``` 
 
 ### After Up & Before Down
 

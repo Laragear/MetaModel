@@ -2,18 +2,23 @@
 
 namespace Tests;
 
+use BadMethodCallException;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder as SchemaBuilder;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
+use Laragear\MetaModel\CustomizableMigration;
 use Mockery as m;
 use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Tests\Fixtures\TestMigration;
 use Tests\Fixtures\TestMigrationWithMorph;
+use Tests\Fixtures\TestMigrationWithMorphDefaulted;
 use Tests\Fixtures\TestModel;
+use Throwable;
 
 class CustomizableMigrationTest extends TestCase
 {
@@ -56,8 +61,6 @@ class CustomizableMigrationTest extends TestCase
 
             return true;
         });
-
-
 
         TestModel::migration()->up();
     }
@@ -116,14 +119,101 @@ class CustomizableMigrationTest extends TestCase
     }
 
     #[Test]
-    public function morphs_default_from_builder(): void
+    public function morphs_throws_if_called_twice(): void
     {
-        TestModel::$migration = TestMigrationWithMorph::class;
+        $blueprint = m::mock(Blueprint::class);
+        $blueprint->expects('morphs')->with('foo', null)->once();
+
+        $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
+
+        $exception = null;
+
+        $schema->expects('create')->once()->withArgs(
+            function (string $table, Closure $closure) use ($blueprint, &$exception): bool {
+                try {
+                    $closure($blueprint);
+                } catch (Throwable $e) {
+                    $exception = $e;
+                }
+
+                return true;
+            }
+        );
+
+        $migration = new class(TestModel::class) extends CustomizableMigration
+        {
+            public function create(Blueprint $table): void
+            {
+                $this->createMorph($table, 'foo');
+                $this->createMorph($table, 'foo');
+            }
+        };
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Using multiple customizable morph calls is unsupported.');
+
+        $migration->up();
+
+        throw $exception;
+    }
+
+    #[Test]
+    public function morph_nullable_throws_if_called_twice(): void
+    {
+        $blueprint = m::mock(Blueprint::class);
+        $blueprint->expects('morphs')->with('foo', null)->once();
+
+        $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
+
+        $exception = null;
+
+        $schema->expects('create')->once()->withArgs(
+            function (string $table, Closure $closure) use ($blueprint, &$exception): bool {
+                try {
+                    $closure($blueprint);
+                } catch (Throwable $e) {
+                    $exception = $e;
+                }
+
+                return true;
+            }
+        );
+
+        $migration = new class(TestModel::class) extends CustomizableMigration
+        {
+            public function create(Blueprint $table): void
+            {
+                $this->createMorph($table, 'foo');
+                $this->createMorph($table, 'foo');
+            }
+        };
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Using multiple customizable morph calls is unsupported.');
+
+        $migration->up();
+
+        throw $exception;
+    }
+
+    public static function useMigrations(): array
+    {
+        return [
+            ['migration' => TestMigrationWithMorph::class, 'index' => null],
+            ['migration' => TestMigrationWithMorphDefaulted::class, 'index' => 'custom_index'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('useMigrations')]
+    public function morphs_default_from_builder(string $migration, ?string $index): void
+    {
+        TestModel::$migration = $migration;
 
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('createCall')->once();
-        $blueprint->expects('morphs')->with('foo', null)->once();
-        $blueprint->expects('nullableMorphs')->with('bar', null)->once();
+        $blueprint->expects('morphs')->with('foo', $index)->once();
+        $blueprint->expects('nullableMorphs')->with('bar', $index)->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
 
@@ -138,17 +228,20 @@ class CustomizableMigrationTest extends TestCase
     }
 
     #[Test]
-    public function morphs_to_numeric(): void
+    #[DataProvider('useMigrations')]
+    public function morphs_to_numeric(string $migration, ?string $index): void
     {
-        TestModel::$migration = TestMigrationWithMorph::class;
+        TestModel::$migration = $migration;
 
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('createCall')->twice();
-        $blueprint->expects('numericMorphs')->with('foo', null)->twice();
-        $blueprint->expects('nullableNumericMorphs')->with('bar', null)->twice();
+        $blueprint->expects('createCall')->times(3);
+        $blueprint->expects('numericMorphs')->with('foo', $index)->twice();
+        $blueprint->expects('nullableNumericMorphs')->with('bar', $index)->twice();
+        $blueprint->expects('numericMorphs')->with('foo', 'test_index')->once();
+        $blueprint->expects('nullableNumericMorphs')->with('bar', 'test_index')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
-        $schema->expects('create')->twice()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('create')->times(3)->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
             static::assertSame('test_models', $table);
 
             $closure($blueprint);
@@ -158,20 +251,24 @@ class CustomizableMigrationTest extends TestCase
 
         TestModel::migration()->morphNumeric->up();
         TestModel::migration()->morph('numeric')->up();
+        TestModel::migration()->morph('numeric', 'test_index')->up();
     }
 
     #[Test]
-    public function morphs_to_uuid(): void
+    #[DataProvider('useMigrations')]
+    public function morphs_to_uuid(string $migration, ?string $index): void
     {
-        TestModel::$migration = TestMigrationWithMorph::class;
+        TestModel::$migration = $migration;
 
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('createCall')->twice();
-        $blueprint->expects('uuidMorphs')->with('foo', null)->twice();
-        $blueprint->expects('nullableUuidMorphs')->with('bar', null)->twice();
+        $blueprint->expects('createCall')->times(3);
+        $blueprint->expects('uuidMorphs')->with('foo', $index)->twice();
+        $blueprint->expects('nullableUuidMorphs')->with('bar', $index)->twice();
+        $blueprint->expects('uuidMorphs')->with('foo', 'test_index')->once();
+        $blueprint->expects('nullableUuidMorphs')->with('bar', 'test_index')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
-        $schema->expects('create')->twice()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('create')->times(3)->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
             static::assertSame('test_models', $table);
             $closure($blueprint);
 
@@ -180,20 +277,24 @@ class CustomizableMigrationTest extends TestCase
 
         TestModel::migration()->morphUuid->up();
         TestModel::migration()->morph('uuid')->up();
+        TestModel::migration()->morph('uuid', 'test_index')->up();
     }
 
     #[Test]
-    public function morphs_to_ulid(): void
+    #[DataProvider('useMigrations')]
+    public function morphs_to_ulid(string $migration, ?string $index): void
     {
-        TestModel::$migration = TestMigrationWithMorph::class;
+        TestModel::$migration = $migration;
 
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('createCall')->twice();
-        $blueprint->expects('ulidMorphs')->with('foo', null)->twice();
-        $blueprint->expects('nullableUlidMorphs')->with('bar', null)->twice();
+        $blueprint->expects('createCall')->times(3);
+        $blueprint->expects('ulidMorphs')->with('foo', $index)->twice();
+        $blueprint->expects('nullableUlidMorphs')->with('bar', $index)->twice();
+        $blueprint->expects('ulidMorphs')->with('foo', 'test_index')->once();
+        $blueprint->expects('nullableUlidMorphs')->with('bar', 'test_index')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
-        $schema->expects('create')->twice()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('create')->times(3)->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
             static::assertSame('test_models', $table);
             $closure($blueprint);
 
@@ -202,6 +303,7 @@ class CustomizableMigrationTest extends TestCase
 
         TestModel::migration()->morphUlid->up();
         TestModel::migration()->morph('ulid')->up();
+        TestModel::migration()->morph('ulid', 'test_index')->up();
     }
 
     #[Test]
