@@ -55,15 +55,15 @@ namespace Vendor\Package\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Laragear\MetaModel\CustomizableModel;
-use Vendor\Package\Migrations\ModelMigration;
+use Vendor\Package\Migrations\CarMigration;
 
-class MyModel extends Model
+class Car extends Model
 {
     use CustomizableModel;
     
     protected static function migrationClass(): string
     {
-        return ModelMigration::class;
+        return CarMigration::class;
     }
 }
 ```
@@ -94,6 +94,58 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Car::$useCasts = ['is_new' => 'boolean'];
+    }
+}
+```
+
+### Appends
+
+As you are guessing, the `useAppend` only works when your model has attributes accessors. If you expect the user to append attributes in your model serialization, ensure you have the proper accessors.
+
+For example, we could add the `color` and `chassis` attribute accessors in our Car model.
+
+```php
+namespace Vendor\Package\Models;
+
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
+use Laragear\MetaModel\CustomizableModel;
+use Vendor\Package\Migrations\ModelMigration;
+
+class Car extends Model
+{
+    use CustomizableModel;
+    
+    // ...
+    
+    protected function getColorAttribute()
+    {
+        return $this->metadata->color;
+    }
+    
+    protected function chassis(): Attribute
+    {
+        return Attribute::get(fn() => (string) $this->metadata->chassis)
+    }
+}
+```
+
+Later, the end-developer can append these at runtime.
+
+```php
+namespace App\Providers;
+
+use MyVendor\MyPackage\Models\Car;
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        Car::$useAppends = ['color', 'chassis'];
     }
 }
 ```
