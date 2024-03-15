@@ -112,10 +112,10 @@ trait CustomizableModel
     /**
      * Return a new customizable migration instance.
      *
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)|null  $with
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void) ...$with
      */
-    public static function migration(Closure $with = null): CustomizableMigration
+    public static function migration(Closure ...$with): CustomizableMigration
     {
-        return new (static::migrationClass())(static::class, $with);
+        return (new (static::migrationClass())(static::class, $with));
     }
 }

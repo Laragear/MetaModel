@@ -53,14 +53,16 @@ abstract class CustomizableMigration extends Migration
     abstract public function create(Blueprint $table): void;
 
     /**
-     * Execute a callback from the developer to add more columns in the table, if any.
+     * Execute stored callbacks using the table Blueprint instance.
      *
      * @param  \Illuminate\Database\Schema\Blueprint  $table
      * @return void
      */
     protected function addColumns(Blueprint $table): void
     {
-        with($table, $this->with);
+        foreach ($this->with as $callback) {
+            $callback($table);
+        }
     }
 
     /**
