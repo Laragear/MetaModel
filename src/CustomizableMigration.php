@@ -2,6 +2,7 @@
 
 namespace Laragear\MetaModel;
 
+use BadMethodCallException;
 use Closure;
 use Error;
 use Illuminate\Database\Migrations\Migration;
@@ -33,7 +34,6 @@ abstract class CustomizableMigration extends Migration
      * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $afterUp
      * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $beforeDown
      * @param  "numeric"|"uuid"|"ulid"|""  $morphType
-     * @param  string|null  $morphIndexName
      */
     public function __construct(
         string $model,
@@ -42,6 +42,7 @@ abstract class CustomizableMigration extends Migration
         protected array $beforeDown = [],
         protected string $morphType = '',
         protected ?string $morphIndexName = null,
+        protected bool $morphCalled = false,
     )
     {
         $this->table = (new $model)->getTable();
@@ -75,6 +76,48 @@ abstract class CustomizableMigration extends Migration
         foreach ($this->with as $callback) {
             $callback($table);
         }
+    }
+
+    /**
+     * Create a new morph relation.
+     */
+    protected function createMorph(Blueprint $table, string $name, string $indexName = null): void
+    {
+        if ($this->morphCalled) {
+            throw new BadMethodCallException('Using multiple customizable morph calls is unsupported.');
+        }
+
+        $indexName = $this->morphIndexName ?? $indexName;
+
+        match (strtolower($this->morphType)) {
+            'numeric' => $table->numericMorphs($name, $indexName),
+            'uuid' => $table->uuidMorphs($name, $indexName),
+            'ulid' => $table->ulidMorphs($name, $indexName),
+            default => $table->morphs($name, $indexName)
+        };
+
+        $this->morphCalled = true;
+    }
+
+    /**
+     * Create a new nullable morph relation.
+     */
+    protected function createNullableMorph(Blueprint $table, string $name, string $indexName = null): void
+    {
+        if ($this->morphCalled) {
+            throw new BadMethodCallException('Using multiple customizable morph calls is unsupported.');
+        }
+
+        $indexName = $this->morphIndexName ?? $indexName;
+
+        match (strtolower($this->morphType)) {
+            'numeric' => $table->nullableNumericMorphs($name, $indexName),
+            'uuid' => $table->nullableUuidMorphs($name, $indexName),
+            'ulid' => $table->nullableUlidMorphs($name, $indexName),
+            default => $table->nullableMorphs($name, $indexName)
+        };
+
+        $this->morphCalled = true;
     }
 
     /**
@@ -129,32 +172,6 @@ abstract class CustomizableMigration extends Migration
         array_push($this->beforeDown, ...$callbacks);
 
         return $this;
-    }
-
-    /**
-     * Create a new morph relation.
-     */
-    protected function createMorph(Blueprint $table, string $name): void
-    {
-        match (strtolower($this->morphType)) {
-            'numeric' => $table->numericMorphs($name, $this->morphIndexName),
-            'uuid' => $table->uuidMorphs($name, $this->morphIndexName),
-            'ulid' => $table->ulidMorphs($name, $this->morphIndexName),
-            default => $table->morphs($name, $this->morphIndexName)
-        };
-    }
-
-    /**
-     * Create a new nullable morph relation.
-     */
-    protected function createNullableMorph(Blueprint $table, string $name): void
-    {
-        match (strtolower($this->morphType)) {
-            'numeric' => $table->nullableNumericMorphs($name, $this->morphIndexName),
-            'uuid' => $table->nullableUuidMorphs($name, $this->morphIndexName),
-            'ulid' => $table->nullableUlidMorphs($name, $this->morphIndexName),
-            default => $table->nullableMorphs($name, $this->morphIndexName)
-        };
     }
 
     /**
