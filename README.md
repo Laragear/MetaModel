@@ -55,22 +55,23 @@ namespace Vendor\Package\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Laragear\MetaModel\CustomizableModel;
-use Vendor\Package\Migrations\ModelMigration;
+use Vendor\Package\Migrations\CarMigration;
 
-class MyModel extends Model
+class Car extends Model
 {
     use CustomizableModel;
     
     protected static function migrationClass(): string
     {
-        return ModelMigration::class;
+        return CarMigration::class;
     }
 }
 ```
 
 From there, the end-developer can customize the model using the available static properties:
 
-- `$useTable`: A custom table name to use.
+- `$useConnection`: The custom connection name to use.
+- `$useTable`: The custom table name to use.
 - `$useCasts`: The casts attributes to merge.
 - `$useFillable`: The fillable attributes to merge.
 - `$useGuarded`: The guarded attributes to merge.
@@ -98,6 +99,58 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
+### Appends
+
+As you are guessing, the `useAppend` only works when your model has attributes accessors. If you expect the user to append attributes in your model serialization, ensure you have the proper accessors.
+
+For example, we could add the `color` and `chassis` attribute accessors in our Car model.
+
+```php
+namespace Vendor\Package\Models;
+
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
+use Laragear\MetaModel\CustomizableModel;
+use Vendor\Package\Migrations\ModelMigration;
+
+class Car extends Model
+{
+    use CustomizableModel;
+    
+    // ...
+    
+    protected function getColorAttribute()
+    {
+        return $this->metadata->color;
+    }
+    
+    protected function chassis(): Attribute
+    {
+        return Attribute::get(fn() => (string) $this->metadata->chassis)
+    }
+}
+```
+
+Later, the end-developer can append these at runtime.
+
+```php
+namespace App\Providers;
+
+use MyVendor\MyPackage\Models\Car;
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        Car::$useAppends = ['color', 'chassis'];
+    }
+}
+```
+
 ## Customizable Migration
 
 To allow customizable migrations, create a standard migration file, but, instead of returning a class that extends the default `Migration` class, return a `migration()` call to your model class.
@@ -113,10 +166,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Laragear\MetaModel\CustomizableMigration;
 use MyVendor\MyPackage\Models\Car;
 
-abstract class CarsMigration extends CustomizableMigration
+class CarsMigration extends CustomizableMigration
 {
-    protected static $model = Car::class;
-
     protected function create(Blueprint $table)
     {
         $table->id();
@@ -161,6 +212,43 @@ use Illuminate\Database\Schema\Blueprint;
 return Car::migration();
 ```
 
+### Booting 
+
+You can run custom logic when the migration is instanced using the `boot()` method. 
+
+```php
+namespace MyVendor\MyPackage\Migrations;
+
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\MetaModel\CustomizableMigration;
+use MyVendor\MyPackage\Models\Car;
+
+class CarsMigration extends CustomizableMigration
+{
+    protected function boot() : void
+    {
+        if (app()->isUnitTesting()) {
+            Car::$useConnection = env('DB_CONNECTION');        
+        }
+    }
+
+    protected function create(Blueprint $table)
+    {
+        $table->id();
+        
+        $table->string('manufacturer');
+        $table->string('model');
+        $table->tinyInteger('year');
+        
+        $table->timestamps();
+    }
+}
+```
+
+> [!CAUTION]
+> 
+> The `boot()` method runs every time the migration is instanced. Ensure the method effects are idempotent when required.
+
 ### Adding Custom Columns
 
 You may want to let the end-developer to add additional columns to the migration. For that, just call `addColumns()` anywhere inside the `create()` method, ensuring you pass the `Blueprint` instance. A great place to call this is just before the `timestamps()` or after the primary key.
@@ -200,9 +288,22 @@ return Car::migration(function (Blueprint $table) {
 })
 ```
 
+An end-developer can also add multiple callbacks programmatically if needed, which are great to separate concerns.
+
+```php
+use MyVendor\MyPackage\Models\Car;
+use Illuminate\Database\Schema\Blueprint;
+
+return Car::migration(
+    fn ($table) => /* ... */,
+    fn ($table) => /* ... */,
+    fn ($table) => /* ... */,
+);
+```
+
 > [!TIP]
 > 
-> If you don't want to support additional columns, it's fine. If the end-developer adds a callback, it won't be executed regardless. 
+> You can omit the `addColumns()` call if you don't want to support additional columns, as any added callback won't be executed.
 
 ### Morphs
 
@@ -260,7 +361,7 @@ return Car::migration()->morph('ulid');
 
 ### After Up & Before Down
 
-The `CustomizableMigration` contains two methods, `afterUp()` and `beforeDown()`. The first is executed after the table is created, while the latter is executed before the table is dropped. This allows the developer to run custom logic to enhance its migrations, or avoid failing migrations.
+An end-developer can execute logic after the table is created, and before the table is dropped, using the `afterUp()` and `beforeDown()` methods, respectively. This allows the developer to run enhance the table, or avoid failing migrations.
 
 For example, the end-developer can use these methods to create foreign column references, and remove them before dropping the table.
 
@@ -276,6 +377,10 @@ return Car::migration()
          $table->dropForeign('manufacturer');
     });
 ```
+
+> [!IMPORTANT]
+> 
+> The `afterUp()` and `beforeDown()` adds callbacks to the migration, it doesn't replace them.
 
 ## Package documentation
 

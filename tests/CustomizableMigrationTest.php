@@ -103,19 +103,24 @@ class CustomizableMigrationTest extends TestCase
         TestMigration::$callMethod = true;
 
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('createCall')->twice();
-        $blueprint->expects('addCall')->twice();
+        $blueprint->expects('createCall')->once();
+        $blueprint->expects('firstCall')->once();
+        $blueprint->expects('secondCall')->once();
+        $blueprint->expects('thirdCall')->once();
+        $blueprint->expects('fourthCall')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
-        $schema->expects('create')->twice()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('create')->once()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
             static::assertSame('test_models', $table);
             $closure($blueprint);
 
             return true;
         });
 
-        TestModel::migration()->with(fn($table) => $table->addCall())->up();
-        TestModel::migration(fn($table) => $table->addCall())->up();
+        TestModel::migration(fn($table) => $table->firstCall())
+            ->with(fn($table) => $table->secondCall())
+            ->with(fn($table) => $table->thirdCall(), fn($table) => $table->fourthCall())
+            ->up();
     }
 
     #[Test]
@@ -310,18 +315,24 @@ class CustomizableMigrationTest extends TestCase
     public function calls_after_up(): void
     {
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('createCall')->once();
+        $blueprint->expects('firstCall')->once();
+        $blueprint->expects('secondCall')->once();
+        $blueprint->expects('thirdCall')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
         $schema->expects('create')->once();
-        $schema->expects('table')->once()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('table')->times(3)->withArgs(function (string $table, Closure $closure) use ($blueprint
+        ): bool {
             static::assertSame('test_models', $table);
             $closure($blueprint);
 
             return true;
         });
 
-        TestModel::migration()->afterUp(fn($table) => $table->createCall())->up();
+        TestModel::migration()
+            ->afterUp(fn($table) => $table->firstCall())
+            ->afterUp(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
+            ->up();
     }
 
     #[Test]
@@ -339,10 +350,13 @@ class CustomizableMigrationTest extends TestCase
     public function calls_before_down(): void
     {
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('afterDownCall')->once();
+        $blueprint->expects('firstCall')->once();
+        $blueprint->expects('secondCall')->once();
+        $blueprint->expects('thirdCall')->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
-        $schema->expects('table')->once()->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
+        $schema->expects('table')->times(3)->withArgs(function (string $table, Closure $closure) use ($blueprint
+        ): bool {
             static::assertSame('test_models', $table);
             $closure($blueprint);
 
@@ -351,6 +365,20 @@ class CustomizableMigrationTest extends TestCase
 
         $schema->expects('dropIfExists')->with('test_models')->once();
 
-        TestModel::migration()->beforeDown(fn($table) => $table->afterDownCall())->down();
+        TestModel::migration()
+            ->beforeDown(fn($table) => $table->firstCall())
+            ->beforeDown(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
+            ->down();
+    }
+
+    #[Test]
+    public function calls_boot_method(): void
+    {
+        $this->expectNotToPerformAssertions();
+
+        $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
+        $schema->expects('create')->with('test', m::type(Closure::class))->once();
+
+        new Fixtures\TestMigrationWithBoot(TestModel::class);
     }
 }
