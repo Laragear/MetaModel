@@ -44,6 +44,18 @@ abstract class CustomizableMigration extends Migration
     )
     {
         $this->table = (new $model)->getTable();
+
+        $this->boot();
+    }
+
+    /**
+     * Run additional logic when the migration is instanced.
+     *
+     * @return void
+     */
+    protected function boot(): void
+    {
+        //
     }
 
     /**
