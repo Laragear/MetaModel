@@ -7,6 +7,7 @@ use Error;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use function array_push;
 use function sprintf;
 use function strtolower;
 
@@ -28,17 +29,17 @@ abstract class CustomizableMigration extends Migration
      * Create a new Customizable Migration instance.
      *
      * @param  class-string<\Illuminate\Database\Eloquent\Model>  $model
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)|null  $with
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)|null  $afterUp
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)|null  $beforeDown
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $with
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $afterUp
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $beforeDown
      * @param  "numeric"|"uuid"|"ulid"|""  $morphType
      * @param  string|null  $morphIndexName
      */
     public function __construct(
         string $model,
-        protected ?Closure $with = null,
-        protected ?Closure $afterUp = null,
-        protected ?Closure $beforeDown = null,
+        protected array $with = [],
+        protected array $afterUp = [],
+        protected array $beforeDown = [],
         protected string $morphType = '',
         protected ?string $morphIndexName = null,
     )
@@ -64,14 +65,16 @@ abstract class CustomizableMigration extends Migration
     abstract public function create(Blueprint $table): void;
 
     /**
-     * Execute a callback from the developer to add more columns in the table, if any.
+     * Execute stored callbacks using the table Blueprint instance.
      *
      * @param  \Illuminate\Database\Schema\Blueprint  $table
      * @return void
      */
     protected function addColumns(Blueprint $table): void
     {
-        with($table, $this->with);
+        foreach ($this->with as $callback) {
+            $callback($table);
+        }
     }
 
     /**
@@ -92,12 +95,12 @@ abstract class CustomizableMigration extends Migration
     /**
      * Add additional columns to the table.
      *
-     * @param  \Closure(\Illuminate\Database\Schema\Blueprint $table):void  $callback
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)  ...$callbacks
      * @return $this
      */
-    public function with(Closure $callback): static
+    public function with(Closure ...$callbacks): static
     {
-        $this->with = $callback;
+        array_push($this->with, ...$callbacks);
 
         return $this;
     }
@@ -105,12 +108,12 @@ abstract class CustomizableMigration extends Migration
     /**
      * Execute the callback after the "up" method.
      *
-     * @param  \Closure(\Illuminate\Database\Schema\Blueprint $table):void  $callback
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)  ...$callbacks
      * @return $this
      */
-    public function afterUp(Closure $callback): static
+    public function afterUp(Closure ...$callbacks): static
     {
-        $this->afterUp = $callback;
+        array_push($this->afterUp, ...$callbacks);
 
         return $this;
     }
@@ -118,12 +121,12 @@ abstract class CustomizableMigration extends Migration
     /**
      * Execute the callback before the "down" method.
      *
-     * @param  \Closure(\Illuminate\Database\Schema\Blueprint $table):void  $callback
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)  ...$callbacks
      * @return $this
      */
-    public function beforeDown(Closure $callback): static
+    public function beforeDown(Closure ...$callbacks): static
     {
-        $this->beforeDown = $callback;
+        array_push($this->beforeDown, ...$callbacks);
 
         return $this;
     }
@@ -180,8 +183,8 @@ abstract class CustomizableMigration extends Migration
     {
         Schema::create($this->table, $this->create(...));
 
-        if ($this->afterUp) {
-            Schema::table($this->table, $this->afterUp);
+        foreach ($this->afterUp as $callback) {
+            Schema::table($this->table, $callback);
         }
     }
 
@@ -192,8 +195,8 @@ abstract class CustomizableMigration extends Migration
      */
     public function down(): void
     {
-        if ($this->beforeDown) {
-            Schema::table($this->table, $this->beforeDown);
+        foreach ($this->beforeDown as $callback) {
+            Schema::table($this->table, $callback);
         }
 
         Schema::dropIfExists($this->table);

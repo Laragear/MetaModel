@@ -288,9 +288,22 @@ return Car::migration(function (Blueprint $table) {
 })
 ```
 
+An end-developer can also add multiple callbacks programmatically if needed, which are great to separate concerns.
+
+```php
+use MyVendor\MyPackage\Models\Car;
+use Illuminate\Database\Schema\Blueprint;
+
+return Car::migration(
+    fn ($table) => /* ... */,
+    fn ($table) => /* ... */,
+    fn ($table) => /* ... */,
+);
+```
+
 > [!TIP]
 > 
-> If you don't want to support additional columns, it's fine. If the end-developer adds a callback, it won't be executed regardless. 
+> You can omit the `addColumns()` call if you don't want to support additional columns, as any added callback won't be executed.
 
 ### Morphs
 
@@ -322,7 +335,7 @@ return Car::migration()->morph('ulid', 'custom_index_name');
 
 ### After Up & Before Down
 
-The `CustomizableMigration` contains two methods, `afterUp()` and `beforeDown()`. The first is executed after the table is created, while the latter is executed before the table is dropped. This allows the developer to run custom logic to enhance its migrations, or avoid failing migrations.
+An end-developer can execute logic after the table is created, and before the table is dropped, using the `afterUp()` and `beforeDown()` methods, respectively. This allows the developer to run enhance the table, or avoid failing migrations.
 
 For example, the end-developer can use these methods to create foreign column references, and remove them before dropping the table.
 
@@ -338,6 +351,10 @@ return Car::migration()
          $table->dropForeign('manufacturer');
     });
 ```
+
+> [!IMPORTANT]
+> 
+> The `afterUp()` and `beforeDown()` adds callbacks to the migration, it doesn't replace them.
 
 ## Package documentation
 
