@@ -166,7 +166,7 @@ class CustomizableMigrationTest extends TestCase
     public function morph_nullable_throws_if_called_twice(): void
     {
         $blueprint = m::mock(Blueprint::class);
-        $blueprint->expects('morphs')->with('foo', null)->once();
+        $blueprint->expects('nullableMorphs')->with('foo', null)->once();
 
         $this->container->instance('db.schema', $schema = m::mock(SchemaBuilder::class));
 
@@ -188,8 +188,8 @@ class CustomizableMigrationTest extends TestCase
         {
             public function create(Blueprint $table): void
             {
-                $this->createMorph($table, 'foo');
-                $this->createMorph($table, 'foo');
+                $this->createNullableMorph($table, 'foo');
+                $this->createNullableMorph($table, 'foo');
             }
         };
 
