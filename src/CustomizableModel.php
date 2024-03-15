@@ -15,6 +15,13 @@ use function is_array;
 trait CustomizableModel
 {
     /**
+     * The connection name to use with the model.
+     *
+     * @var string|null
+     */
+    public static $useConnection;
+
+    /**
      * The table name to use for this customizable model.
      *
      * @var string|null
@@ -76,6 +83,8 @@ trait CustomizableModel
      */
     protected function initializeCustomizableModel(): void
     {
+        $this->connection = static::$useConnection;
+
         $this->table = static::$useTable;
 
         $resolve = static function (Closure|array $value, $model): array {

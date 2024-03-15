@@ -70,7 +70,8 @@ class Car extends Model
 
 From there, the end-developer can customize the model using the available static properties:
 
-- `$useTable`: A custom table name to use.
+- `$useConnection`: The custom connection name to use.
+- `$useTable`: The custom table name to use.
 - `$useCasts`: The casts attributes to merge.
 - `$useFillable`: The fillable attributes to merge.
 - `$useGuarded`: The guarded attributes to merge.
