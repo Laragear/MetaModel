@@ -208,7 +208,7 @@ return Car::migration(function (Blueprint $table) {
 
 > [!CAUTION]
 > 
-> Morphs are only supported for a single relation. It's highly discouraged multiple morphs relations on one table. 
+> Morphs are only supported for a single relation. Multiple morphs relations on a single table is highly discouraged. 
 
 If your migration requires morph relationships, you will find that end-developers won't always have the same key type in their application. This problem can be fixed by using the `createMorph()` or `createNullableMorph()` method with the `Blueprint` instance and the name of the morph type.
 
