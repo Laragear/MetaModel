@@ -3,6 +3,7 @@
 This package comes with a very hands-off approach for migrations. If you check the new migrations published in `database/migrations`, you will find something very similar to this:
 
 ```php
+// database/migrations/2022_01_01_193000_create_cars_migration.php
 use Vendor\Package\Models\Car;
 
 return Car::migration();
@@ -26,7 +27,43 @@ return Car::migration(function (Blueprint $table) {
 
 > [!INFO]
 > 
-> If your package doesn't support additional tables, the callback never executes. Refer to the package documentation. 
+> If your package doesn't support additional tables, the callback never executes. Refer to the package documentation if adding columns is enabled or not. 
+
+### Relationships
+
+If the package supports it, you may add relationships through their proper migration columns. For example, if we want to add the `driver` relationship to the model, we can use the native `resolveRelationUsing()` on your `AppServiceProvider::boot()`. 
+
+```php
+namespace App\Providers;
+
+use App\Models\Owner;
+use Illuminate\Support\ServiceProvider;
+use Vendor\Package\Models\Driver;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        Car::resolveRelationUsing('driver', function (Car $car) {
+            return $car->belongsTo(Driver::class, 'driver_id')
+        })
+    }
+}
+```
+
+In your migration, you should be able to add the required table for your model using `addColumns()`.
+
+```php
+use App\Models\Driver;
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\Package\Models\Car;
+
+return Car::migration(function (Blueprint $table) {
+    // ...
+    
+    $table->foreignIdFor(Driver::class);
+});
+```
 
 ## After Up & Before Down
 
@@ -47,9 +84,19 @@ return Car::migration()
 
 ### Morphs
 
-You may find yourself needing to alter the type of the morph relation created in the migration. For example, the migration will create an integer-type morph that you won't be able to attach to an ULID-based User model.
+Some packages will create a morph relation automatically to easily handle default relationship across multiple models. For example, a morph migration to support an `owner` being either one of your models `Company` or `Person`.
 
-To change the morph type, use the `morph...` property access preferably, or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large index names).
+```php
+use Laragear\Package\Models\Car;
+
+$car = Car::find(1);
+
+$owners = $car->owner; // App/Models/Company or App/Models/Person
+```
+
+You may find yourself with models that use UUID, ULID or other types of primary keys, but with a migration creating morphs for integer primary keys.
+
+To change the morph type, use the `morph...` property access preferably, or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large ones).
 
 ```php
 use Illuminate\Database\Schema\Blueprint;
@@ -91,7 +138,7 @@ Customize the model using the available static properties:
 - `$useGuarded`: The guarded attributes to merge.
 - `$useHidden`: The hidden attributes to merge.
 - `$useVisible`: The visible attributes to merge.
-- `$useAppends`: The appends attributes to merge.
+- `$useAppends`: The appended attributes to merge.
 
 ```php
 use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
@@ -110,3 +157,7 @@ class AppServiceProvider extends ServiceProvider
     }
 }
 ```
+
+> [!IMPORTANT]
+> 
+> If you're using `$useAppends`, ensure you also set `$useCasts` for attributes that are not part of the model itself. 
