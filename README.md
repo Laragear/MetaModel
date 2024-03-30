@@ -79,7 +79,7 @@ From there, the end-developer can customize the model using the available static
 - `$useVisible`: The visible attributes to merge.
 - `$useAppends`: The appends attributes to merge.
 
-All of these static properties, except for `$useTable`, accept a Closure that receives the model and returns an array of attributes. The end-developer should modify these properties in the `boot()` method of the `AppServiceProvider`.
+All of these static properties, except for `$useTable`, accept a Closure that receives the model and returns an array of attributes. The end-developer should modify these properties in the `register()` method of the `AppServiceProvider`.
 
 ```php
 namespace App\Providers;
@@ -101,7 +101,7 @@ class AppServiceProvider extends ServiceProvider
 
 ### Appends
 
-As you are guessing, the `useAppend` only works when your model has attributes accessors. If you expect the user to append attributes in your model serialization, ensure you have the proper accessors.
+As you are guessing, the `useAppend` only works when your model has attributes accessors, or the developer adds casts for them. If you expect the user to append attributes in your model serialization, ensure you have the proper accessors.
 
 For example, we could add the `color` and `chassis` attribute accessors in our Car model.
 
@@ -153,9 +153,9 @@ class AppServiceProvider extends ServiceProvider
 
 ## Customizable Migration
 
-To allow customizable migrations, create a standard migration file, but, instead of returning a class that extends the default `Migration` class, return a `migration()` call to your model class.
+To allow customizable migrations, create a standard migration file, but, instead of returning a class that extends the default `Migration` class, return a `migration()` call from your model class.
 
-Let's explain this is awesome.
+Let's explain why this is awesome.
 
 For example, let's say we want to create a migration for a Car model. We will create a class that extends the `CustomizableMigration` class. From there, the table schema will be handled in the `create()` method.
 
@@ -288,7 +288,7 @@ return Car::migration(function (Blueprint $table) {
 })
 ```
 
-An end-developer can also add multiple callbacks programmatically if needed, which are great to separate concerns.
+An end-developer can also add multiple callbacks programmatically if needed, which are great for separation of concerns.
 
 ```php
 use MyVendor\MyPackage\Models\Car;

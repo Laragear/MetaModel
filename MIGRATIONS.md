@@ -25,9 +25,9 @@ return Car::migration(function (Blueprint $table) {
 });
 ```
 
-> [!INFO]
+> [!NOTE]
 > 
-> If your package doesn't support additional tables, the callback never executes. Refer to the package documentation if adding columns is enabled or not. 
+> If your package doesn't support additional tables, the callback never executes. Refer to the package documentation if adding columns to the migration is supported or not. 
 
 ### Relationships
 
@@ -84,7 +84,7 @@ return Car::migration()
 
 ### Morphs
 
-Some packages will create a morph relation automatically to easily handle default relationship across multiple models. For example, a morph migration to support an `owner` being either one of your models `Company` or `Person`.
+Some packages will create a morph relation automatically to easily handle default relationship across multiple models. For example, a morph migration to support an `owner` being either one of your `Company` or `Person` models.
 
 ```php
 use Laragear\Package\Models\Car;
@@ -94,7 +94,7 @@ $car = Car::find(1);
 $owners = $car->owner; // App/Models/Company or App/Models/Person
 ```
 
-You may find yourself with models that use UUID, ULID or other types of primary keys, but with a migration creating morphs for integer primary keys.
+If your models don't share the same primary key type than the morph columns, you may change the morph type created in the migration.
 
 To change the morph type, use the `morph...` property access preferably, or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large ones).
 
@@ -160,4 +160,4 @@ class AppServiceProvider extends ServiceProvider
 
 > [!IMPORTANT]
 > 
-> If you're using `$useAppends`, ensure you also set `$useCasts` for attributes that are not part of the model itself. 
+> If you're using `$useAppends`, ensure you also set `$useCasts` for attributes that are not part of the model itself, otherwise these attributes will be treated as strings.
