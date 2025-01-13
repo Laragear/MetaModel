@@ -81,7 +81,7 @@ abstract class CustomizableMigration extends Migration
     /**
      * Create a new morph relation.
      */
-    protected function createMorph(Blueprint $table, string $name, string $indexName = null): void
+    protected function createMorph(Blueprint $table, string $name, ?string $indexName = null): void
     {
         if ($this->morphCalled) {
             throw new BadMethodCallException('Using multiple customizable morph calls is unsupported.');
@@ -102,7 +102,7 @@ abstract class CustomizableMigration extends Migration
     /**
      * Create a new nullable morph relation.
      */
-    protected function createNullableMorph(Blueprint $table, string $name, string $indexName = null): void
+    protected function createNullableMorph(Blueprint $table, string $name, ?string $indexName = null): void
     {
         if ($this->morphCalled) {
             throw new BadMethodCallException('Using multiple customizable morph calls is unsupported.');
@@ -127,7 +127,7 @@ abstract class CustomizableMigration extends Migration
      * @param  string|null  $indexName
      * @return $this
      */
-    public function morph(string $type, string $indexName = null): static
+    public function morph(string $type, ?string $indexName = null): static
     {
         $this->morphType = $type;
         $this->morphIndexName = $indexName;
