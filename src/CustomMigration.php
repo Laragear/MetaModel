@@ -228,10 +228,10 @@ class CustomMigration extends Migration
      * Create a new customizable migration for an external model.
      *
      * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)  $create
-     * @param  \Illuminate\Database\Eloquent\Model|class-string<\Illuminate\Database\Eloquent\Model>  $model
+     * @param  \Illuminate\Database\Eloquent\Model|class-string<\Illuminate\Database\Eloquent\Model>|null  $model
      * @return static
      */
-    public static function create(Closure $create, Model|string $model = ''): static
+    public static function create(Closure $create, Model|string|null $model = null): static
     {
         // If the developer didn't set the model, we will find its name using a debug backtrace.
         if (!$model) {
