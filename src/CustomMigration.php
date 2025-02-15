@@ -22,6 +22,8 @@ use const DEBUG_BACKTRACE_IGNORE_ARGS;
  * @property-read static $morphNumeric
  * @property-read static $morphUuid
  * @property-read static $morphUlid
+ *
+ * @phpstan-consistent-constructor
  */
 class CustomMigration extends Migration
 {
