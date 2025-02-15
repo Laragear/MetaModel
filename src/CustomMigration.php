@@ -5,19 +5,25 @@ namespace Laragear\MetaModel;
 use BadMethodCallException;
 use Closure;
 use Error;
+use Illuminate\Container\Container;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Builder;
 use function array_push;
+use function data_get;
+use function debug_backtrace;
+use function is_string;
 use function sprintf;
 use function strtolower;
+use const DEBUG_BACKTRACE_IGNORE_ARGS;
 
 /**
  * @property-read static $morphNumeric
  * @property-read static $morphUuid
  * @property-read static $morphUlid
  */
-abstract class CustomizableMigration extends Migration
+class CustomMigration extends Migration
 {
     /**
      * The table to use for the migration.
@@ -29,14 +35,15 @@ abstract class CustomizableMigration extends Migration
     /**
      * Create a new Customizable Migration instance.
      *
-     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $model
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $with
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $afterUp
-     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint $table):void)[]  $beforeDown
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)|null  $create
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)[]  $with
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)[]  $afterUp
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)[]  $beforeDown
      * @param  "numeric"|"uuid"|"ulid"|""  $morphType
      */
     public function __construct(
-        string $model,
+        protected Model $model,
+        protected ?Closure $create = null,
         protected array $with = [],
         protected array $afterUp = [],
         protected array $beforeDown = [],
@@ -45,37 +52,7 @@ abstract class CustomizableMigration extends Migration
         protected bool $morphCalled = false,
     )
     {
-        $this->table = (new $model)->getTable();
-
-        $this->boot();
-    }
-
-    /**
-     * Run additional logic when the migration is instanced.
-     *
-     * @return void
-     */
-    protected function boot(): void
-    {
-        //
-    }
-
-    /**
-     * Create the table columns.
-     */
-    abstract public function create(Blueprint $table): void;
-
-    /**
-     * Execute stored callbacks using the table Blueprint instance.
-     *
-     * @param  \Illuminate\Database\Schema\Blueprint  $table
-     * @return void
-     */
-    protected function addColumns(Blueprint $table): void
-    {
-        foreach ($this->with as $callback) {
-            $callback($table);
-        }
+        $this->table = $model->getTable();
     }
 
     /**
@@ -129,8 +106,7 @@ abstract class CustomizableMigration extends Migration
      */
     public function morph(string $type, ?string $indexName = null): static
     {
-        $this->morphType = $type;
-        $this->morphIndexName = $indexName;
+        [$this->morphType, $this->morphIndexName] = [$type, $indexName];
 
         return $this;
     }
@@ -192,30 +168,80 @@ abstract class CustomizableMigration extends Migration
     }
 
     /**
+     * Retrieve the Database Schema Builder with the appropriate connection.
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     */
+    protected function getBuilder(): Builder
+    {
+        $container = Container::getInstance();
+
+        /** @var \Illuminate\Database\Schema\Builder $builder */
+        $builder = $container->make($container->bound('db.schema') ? 'db.schema' : Builder::class);
+
+        return $builder->setConnection($this->model->getConnection());
+    }
+
+    /**
      * Run the migrations.
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
      * @internal
      */
     public function up(): void
     {
-        Schema::create($this->table, $this->create(...));
+        $builder = $this->getBuilder();
+
+        $builder->create($this->table, function (Blueprint $blueprint): void {
+            // Bind the creation to this migration helper.
+            $this->create->call($this, $blueprint);
+
+            // If there is additional columns, add them at the end of the migration.
+            foreach ($this->with as $callback) {
+                $callback($blueprint);
+            }
+        });
 
         foreach ($this->afterUp as $callback) {
-            Schema::table($this->table, $callback);
+            $builder->table($this->table, $callback);
         }
     }
 
     /**
      * Reverse the migrations.
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
      * @internal
      */
     public function down(): void
     {
+        $builder = $this->getBuilder();
+
         foreach ($this->beforeDown as $callback) {
-            Schema::table($this->table, $callback);
+            $builder->table($this->table, $callback);
         }
 
-        Schema::dropIfExists($this->table);
+        $builder->dropIfExists($this->table);
+    }
+
+    /**
+     * Create a new customizable migration for an external model.
+     *
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)  $create
+     * @param  \Illuminate\Database\Eloquent\Model|class-string<\Illuminate\Database\Eloquent\Model>  $model
+     * @return static
+     */
+    public static function create(Closure $create, Model|string $model = ''): static
+    {
+        // If the developer didn't set the model, we will find its name using a debug backtrace.
+        if (!$model) {
+            $model = data_get(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2), '1.class');
+        }
+
+        if (is_string($model)) {
+            $model = new $model;
+        }
+
+        return new static($model, $create);
     }
 }

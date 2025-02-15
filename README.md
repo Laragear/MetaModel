@@ -10,23 +10,28 @@ Let other developers customize your package model and migrations.
 
 ```php
 use Illuminate\Database\Eloquent\Model;
-use Laragear\MetaModel\CustomizableModel;
-use MyVendor\MyPackage\Migrations\MyMigration;
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\MetaModel\CustomMigration;
+use Laragear\MetaModel\HasCustomization;
 
 class MyPackageModel extends Model
 {
-    use CustomizableModel;
+    use HasCustomization;
     
-    protected static function migrationClass(): string
+    protected static function migration(): string
     {
-        return MyMigration::class    
+        return new CustomMigration(function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->timestamps();
+        })
     }
 }
 ```
 
 > [!TIP]
 > 
-> Did you come here from a package? You probably want to read the [MIGRATIONS.md](MIGRATIONS.md) file instead.
+> Did you come here from a package? You probably want to read the [DATABASE.md](DATABASE.md) file instead.
 
 ## Keep this package free
 
@@ -36,7 +41,7 @@ Your support allows me to keep this package free, up-to-date and maintainable. A
 
 ## Requirements
 
-- Laravel 10 or later
+- Laravel 11 or later
 
 ## Installation
 
@@ -48,158 +53,78 @@ composer require laragear/meta-model
 
 ## Customizing models
 
-Most of the time, your users will want to customize the models and migrations in your package. For example, they would want to add columns and cast them to specific data types, or modify which properties are hidden. This can be done with a model that incorporates the `CustomizableModel` trait.
+When you create a model in your package, most of the time, your end-developers won't be able to modify it unless they create a repository that manually creates a model. Instead, you can add the `HasCustomization` trait to your model and let the developer modify the model when is instanced.
+
 
 ```php
 namespace Vendor\Package\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Laragear\MetaModel\CustomizableModel;
+use Laragear\MetaModel\HasCustomization;
 use Vendor\Package\Migrations\CarMigration;
 
 class Car extends Model
 {
-    use CustomizableModel;
-    
-    protected static function migrationClass(): string
-    {
-        return CarMigration::class;
-    }
-}
-```
-
-From there, the end-developer can customize the model using the available static properties:
-
-- `$useConnection`: The custom connection name to use.
-- `$useTable`: The custom table name to use.
-- `$useCasts`: The casts attributes to merge.
-- `$useFillable`: The fillable attributes to merge.
-- `$useGuarded`: The guarded attributes to merge.
-- `$useHidden`: The hidden attributes to merge.
-- `$useVisible`: The visible attributes to merge.
-- `$useAppends`: The appends attributes to merge.
-
-All of these static properties, except for `$useTable`, accept a Closure that receives the model and returns an array of attributes. The end-developer should modify these properties in the `boot()` method of the `AppServiceProvider`.
-
-```php
-namespace App\Providers;
-
-use MyVendor\MyPackage\Models\Car;
-use Illuminate\Support\ServiceProvider;
-
-class AppServiceProvider extends ServiceProvider
-{
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
-    {
-        Car::$useCasts = ['is_new' => 'boolean'];
-    }
-}
-```
-
-### Appends
-
-As you are guessing, the `useAppend` only works when your model has attributes accessors. If you expect the user to append attributes in your model serialization, ensure you have the proper accessors.
-
-For example, we could add the `color` and `chassis` attribute accessors in our Car model.
-
-```php
-namespace Vendor\Package\Models;
-
-use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Database\Eloquent\Model;
-use Laragear\MetaModel\CustomizableModel;
-use Vendor\Package\Migrations\ModelMigration;
-
-class Car extends Model
-{
-    use CustomizableModel;
+    use HasCustomization;
     
     // ...
-    
-    protected function getColorAttribute()
-    {
-        return $this->metadata->color;
-    }
-    
-    protected function chassis(): Attribute
-    {
-        return Attribute::get(fn() => (string) $this->metadata->chassis)
-    }
 }
 ```
 
-Later, the end-developer can append these at runtime.
+> [!TIP]
+> 
+> The trait is marked as "internal" to avoid appearing on your IDE.
+
+From there, the end-developer can customize the model by setting a callback to the `customize()` method, that receives the model instance. For example, you may do this in your `bootstrap/app.php` through the `booted()` method.
 
 ```php
-namespace App\Providers;
+use Vendor\Package\Models\PackageModel;
 
-use MyVendor\MyPackage\Models\Car;
-use Illuminate\Support\ServiceProvider;
+use Illuminate\Foundation\Application;
 
-class AppServiceProvider extends ServiceProvider
-{
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
-    {
-        Car::$useAppends = ['color', 'chassis'];
-    }
-}
+return Application::booted(function () {
+
+    PackageModel::customize(function ($model) {
+        $model->setTable('my_custom_table');
+        $model->setConnection('read-database');
+    });
+    
+})->create();
 ```
 
-## Customizable Migration
+## Custom Migration
 
-To allow customizable migrations, create a standard migration file, but, instead of returning a class that extends the default `Migration` class, return a `migration()` call to your model class.
+You may use the `migration()` method of the trait to create a hands-off migration that can only be extended. This is a great way to let the developer with an immutable table, but allow them to add columns or change the primary model type for.
 
-Let's explain this is awesome.
-
-For example, let's say we want to create a migration for a Car model. We will create a class that extends the `CustomizableMigration` class. From there, the table schema will be handled in the `create()` method.
-
-```php
-namespace MyVendor\MyPackage\Migrations;
-
-use Illuminate\Database\Schema\Blueprint;
-use Laragear\MetaModel\CustomizableMigration;
-use MyVendor\MyPackage\Models\Car;
-
-class CarsMigration extends CustomizableMigration
-{
-    protected function create(Blueprint $table)
-    {
-        $table->id();
-        
-        $table->string('manufacturer');
-        $table->string('model');
-        $table->tinyInteger('year');
-        
-        $table->timestamps();
-    }
-}
-```
-
-After defining our default migration class, we need tell the Model where is in the `$migration` static property:
+The `Laragear\MetaModel\CustomMigration` class can be created using the `create()` method. It receives a callback that will be used to create the table. The table name is retrieved automatically from the Model, and it will be automatically dropped when invoking `down()`.
 
 ```php
 namespace MyVendor\MyPackage\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Laragear\MetaModel\CustomizableModel;
-use MyVendor\MyPackage\Migrations\CarsMigration;
+use Closure;use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\MetaModel\CustomMigration;
+use Laragear\MetaModel\HasCustomization;
+use MyVendor\MyPackage\Models\Car;
 
 class Car extends Model
 {
-    use CustomizableModel;
+    use HasCustomization;
     
-    protected static function migrationClass(): string
+    public static function migration(): CustomMigration
     {
-        reutnr CarsMigration::class
-    };
+        return new CustomMigration(function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->timestamps();
+        });
+    }
 }
 ```
+
+> [!TIP]
+> 
+> The callback `$this` is bound to the `CustomMigration` instance, not the model.
 
 Once then, we can create the migration file `0000_00_00_000000_create_cars_table.php`. Instead of returning a class that extends the default Laravel migration, we use our model and the `migration()` method.
 
@@ -212,119 +137,30 @@ use Illuminate\Database\Schema\Blueprint;
 return Car::migration();
 ```
 
-### Booting 
-
-You can run custom logic when the migration is instanced using the `boot()` method. 
-
-```php
-namespace MyVendor\MyPackage\Migrations;
-
-use Illuminate\Database\Schema\Blueprint;
-use Laragear\MetaModel\CustomizableMigration;
-use MyVendor\MyPackage\Models\Car;
-
-class CarsMigration extends CustomizableMigration
-{
-    protected function boot() : void
-    {
-        if (app()->isUnitTesting()) {
-            Car::$useConnection = env('DB_CONNECTION');        
-        }
-    }
-
-    protected function create(Blueprint $table)
-    {
-        $table->id();
-        
-        $table->string('manufacturer');
-        $table->string('model');
-        $table->tinyInteger('year');
-        
-        $table->timestamps();
-    }
-}
-```
-
-> [!CAUTION]
-> 
-> The `boot()` method runs every time the migration is instanced. Ensure the method effects are idempotent when required.
-
-### Adding Custom Columns
-
-You may want to let the end-developer to add additional columns to the migration. For that, just call `addColumns()` anywhere inside the `create()` method, ensuring you pass the `Blueprint` instance. A great place to call this is just before the `timestamps()` or after the primary key.
-
-```php
-namespace MyVendor\MyPackage\Migrations;
-
-use Illuminate\Database\Schema\Blueprint;
-use Laragear\MetaModel\CustomizableMigration;
-
-abstract class CarsMigration extends CustomizableMigration
-{
-    protected function create(Blueprint $table)
-    {
-        $table->id();
-        
-        $table->string('manufacturer');
-        $table->string('model');
-        $table->tinyInteger('year');
-        
-        $this->addColumns($table);
-        
-        $table->timestamps();
-    }
-}
-```
-
-After that, in your migration file, add an empty callback to the `migration()` method, or use the `with()` method, so the end-developer knows he can extend the table schema. 
-
-```php
-use MyVendor\MyPackage\Models\Car;
-use Illuminate\Database\Schema\Blueprint;
-
-return Car::migration(function (Blueprint $table) {
-    // Add your custom columns here.
-    // Don't forget to add casts to the model if necessary!
-})
-```
-
-An end-developer can also add multiple callbacks programmatically if needed, which are great to separate concerns.
-
-```php
-use MyVendor\MyPackage\Models\Car;
-use Illuminate\Database\Schema\Blueprint;
-
-return Car::migration(
-    fn ($table) => /* ... */,
-    fn ($table) => /* ... */,
-    fn ($table) => /* ... */,
-);
-```
-
-> [!TIP]
-> 
-> You can omit the `addColumns()` call if you don't want to support additional columns, as any added callback won't be executed.
-
 ### Morphs
 
 > [!CAUTION]
 > 
 > Morphs are only supported for a single relation. Multiple morphs relations on a single table is highly discouraged. 
 
-If your migration requires morph relationships, you will find that end-developers won't always have the same key type in their application. This problem can be fixed by using the `createMorph()` or `createNullableMorph()` method with the `Blueprint` instance and the name of the morph type.
+If your migration requires morph relationships, you will find that end-developers won't always have the same key type in their application to associate with. This problem can be fixed by using the `createMorph()` or `createNullableMorph()` method with the `Blueprint` instance and the name of the morph type.
 
 ```php
-protected function create(Blueprint $table)
+use Laragear\MetaModel\CustomMigration;
+
+public static function migration(): CustomMigration
 {
-    $table->id();
-    
-    $this->createMorphRelation($table, 'ownable');
-    
-    $table->string('manufacturer');
-    $table->string('model');
-    $table->tinyInteger('year');
-    
-    $table->timestamps();
+    return new CustomMigration(function (Blueprint $table) {
+        $table->id();
+        
+        $this->createMorph($table, 'ownable');
+        
+        $table->string('manufacturer');
+        $table->string('model');
+        $table->tinyInteger('year');
+        
+        $table->timestamps();
+    });
 }
 ```
 
@@ -341,11 +177,15 @@ return Car::migration()->morph('ulid', 'custom_index_name');
 You may also set a custom index name for the morph. It will be used as a default, unless the user overrides it manually.
 
 ```php
-protected function create(Blueprint $table)
+use Laragear\MetaModel\CustomMigration;
+
+public static function migration(): CustomMigration
 {
-    $this->createMorphRelation($table, 'ownable', 'ownable_table_index');
-    
-    // ...
+    return new CustomMigration(function (Blueprint $table) {
+        // ...
+        
+        $this->createMorphRelation($table, 'ownable', 'ownable_table_index');
+    }
 }
 ```
 
@@ -384,7 +224,13 @@ return Car::migration()
 
 ## Package documentation
 
-If you plan to add this to your package, you may also want to copy-and-paste the [MIGRATIONS.md](MIGRATIONS.md) file in your package. This way developers will know how to use your model and migrations. Alternatively, you may also just copy its contents, or link back to this repository.
+If you plan to add this to your package, you may also want to copy-and-paste the [DATABASE.md](DATABASE.md) file in your package. This way developers will know how to use your model and migrations. Alternatively, you may also just copy its contents, or link back to this repository.
+
+You may execute this from your project root:
+
+```shell
+cp vendor/laragear/meta-model/DATABASE.md ./DATABASE.md
+```
 
 ## Laravel Octane compatibility
 
@@ -403,4 +249,4 @@ If you discover any security related issues, please email darkghosthunter@gmail.
 
 This specific package version is licensed under the terms of the [MIT License](LICENSE.md), at time of publishing.
 
-[Laravel](https://laravel.com) is a Trademark of [Taylor Otwell](https://github.com/TaylorOtwell/). Copyright © 2011-2024 Laravel LLC.
+[Laravel](https://laravel.com) is a Trademark of [Taylor Otwell](https://github.com/TaylorOtwell/). Copyright © 2011-2025 Laravel LLC.
