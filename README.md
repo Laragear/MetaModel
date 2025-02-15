@@ -1,8 +1,8 @@
 # Meta Model
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/laragear/meta-model.svg)](https://packagist.org/packages/laragear/meta-model)
 [![Latest stable test run](https://github.com/Laragear/MetaModel/workflows/Tests/badge.svg)](https://github.com/Laragear/MetaModel/actions)
-[![Codecov coverage](https://codecov.io/gh/Laragear/MetaModel/branch/1.x/graph/badge.svg?token=5COE8X0JMJ)](https://codecov.io/gh/Laragear/MetaModel)
-[![Maintainability](https://api.codeclimate.com/v1/badges/c183a169a2e4419c9239/maintainability)](https://codeclimate.com/github/Laragear/MetaModel/maintainability)
+[![codecov](https://codecov.io/gh/Laragear/MetaModel/graph/badge.svg?token=fF74Rp0uWn)](https://codecov.io/gh/Laragear/MetaModel)
+[![Maintainability](https://qlty.sh/badges/0678bc7e-7900-4e17-9038-ccc0e8fb2b56/maintainability.svg)](https://qlty.sh/gh/Laragear/projects/MetaModel)
 [![Sonarcloud Status](https://sonarcloud.io/api/project_badges/measure?project=Laragear_MetaModel&metric=alert_status)](https://sonarcloud.io/dashboard?id=Laragear_MetaModel)
 [![Laravel Octane Compatibility](https://img.shields.io/badge/Laravel%20Octane-Compatible-success?style=flat&logo=laravel)](https://laravel.com/docs/11.x/octane#introduction)
 
