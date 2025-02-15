@@ -1,3 +1,34 @@
+# Model customization
+
+You can further customize the package Models using the `customize()` method with a callback that receives the freshly instanced model instance. For example, you may want to hide some attributes, or change the table and connection the Model by default. Preferably, you would do this in your `bootstrap/app.php`.
+
+```php
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Vendor\Package\Models\Driver;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->booted(function () {
+        // Add the relationship.
+        Car::customize(function (Car $model) {
+            $model->setTable('my_custom_car');
+            $model->setConnection('readonly-mysql');
+            
+            $model->setHidden('private_notes');
+        })
+    })->create();
+```
+
+> [!TIP]
+> 
+> For your convenience, the Migration will automatically pick up the table and connection you set in the Model.
+
 # Migration customization
 
 The library you have installed comes with a very hands-off approach for migrations. If you check the new migrations published at `database/migrations`, you will find something very similar to this:
@@ -104,34 +135,3 @@ return Car::migration()->morphUuid;
 
 return Car::migration()->morph('uuid', 'shorter_morph_index_name');
 ```
-
-# Model customization
-
-You can further customize the package Models using the `customize()` method with a callback that receives the freshly instanced model instance. For example, you may want to hide some attributes, or change the table and connection the Model by default. Preferably, you would do this in your `bootstrap/app.php`.
-
-```php
-use Illuminate\Foundation\Application;
-use Illuminate\Foundation\Configuration\Exceptions;
-use Illuminate\Foundation\Configuration\Middleware;
-use Vendor\Package\Models\Driver;
-
-return Application::configure(basePath: dirname(__DIR__))
-    ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        commands: __DIR__.'/../routes/console.php',
-        health: '/up',
-    )
-    ->booted(function () {
-        // Add the relationship.
-        Car::customize(function (Car $model) {
-            $model->setTable('my_custom_car');
-            $model->setConnection('readonly-mysql');
-            
-            $model->setHidden('private_notes');
-        })
-    })->create();
-```
-
-> [!TIP]
-> 
-> For your convenience, the Migration will automatically pick up the table and connection you set in the Model.
