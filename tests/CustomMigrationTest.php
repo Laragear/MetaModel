@@ -54,7 +54,7 @@ class CustomMigrationTest extends TestCase
         TestModel::$create = fn ($blueprint) => Assert::assertInstanceOf(Blueprint::class, $blueprint);
 
         $this->schema->expects('create')->withArgs(function ($table, $callback) {
-            $callback(new Blueprint($this->schema));
+            $callback(new Blueprint($table));
 
             return true;
         })->andReturnSelf();
@@ -83,7 +83,7 @@ class CustomMigrationTest extends TestCase
         $this->schema->expects('setConnection')->andReturnSelf();
 
         $this->schema->expects('create')->withArgs(function ($table, $callback) {
-            $callback(new Blueprint($this->schema));
+            $callback(new Blueprint($table));
 
             return is_string($table);
         })->andReturnSelf();
