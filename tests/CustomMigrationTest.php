@@ -15,6 +15,7 @@ use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use Throwable;
 
 class CustomMigrationTest extends TestCase
@@ -299,4 +300,5 @@ class CustomMigrationTest extends TestCase
             ->beforeDown(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
             ->down();
     }
+
 }
