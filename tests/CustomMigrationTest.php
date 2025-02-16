@@ -6,109 +6,47 @@ use BadMethodCallException;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Database\Connection;
-use Illuminate\Database\ConnectionResolverInterface;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Schema\Builder as SchemaBuilder;
+use Illuminate\Database\Schema\Builder;
+use Laragear\MetaModel\CustomMigration;
 use Mockery as m;
 use Mockery\MockInterface;
-use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Tests\Fixtures\TestCustomizableModelWithMigration as TestModel;
 use Throwable;
-use function is_string;
 
 class CustomMigrationTest extends TestCase
 {
+    /** @var \Illuminate\Database\Schema\Builder&MockInterface */
+    protected Builder $schema;
+
+    /** @var \Illuminate\Container\Container&MockInterface */
     protected Container $container;
-    protected MockInterface $schema;
-    protected MockInterface $resolver;
-    protected MockInterface $connection;
+
+    /** @var \Illuminate\Database\Eloquent\Model&MockInterface */
+    protected MockInterface $model;
 
     protected function setUp(): void
     {
-        $this->container = Container::getInstance();
+        $this->schema = m::mock(Builder::class);
+        $this->schema->expects('setConnection')->zeroOrMoreTimes()->andReturnSelf();
 
-        $this->schema = $this->container->instance('db.schema', m::mock(SchemaBuilder::class));
-        $this->resolver = $this->container->instance('db', m::mock(ConnectionResolverInterface::class));
-        $this->connection = $this->container->instance('db.connection', m::mock(Connection::class));
+        $this->container = Container::setInstance(m::mock(Container::class));
+        $this->container->expects('make')->withArgs(function (string $class) {
+            return $class === Builder::class;
+        })->atLeast()->once()->andReturn($this->schema);
 
-        $this->resolver->expects('connection')->with(null)->andReturn($this->connection);
-        $this->schema->expects('setConnection')->andReturnSelf();
-
-        TestModel::setConnectionResolver($this->resolver);
-        TestModel::$create = fn () => true;
-        TestModel::customize(null);
+        $this->model = m::mock(Model::class);
+        $this->model->expects('getTable')->atLeast()->once()->andReturn('test_table');
+        $this->model->expects('getConnection')->atLeast()->once()->andReturn(m::mock(Connection::class));
     }
 
     protected function tearDown(): void
     {
         m::close();
-
         Container::setInstance();
-    }
-
-    public function test_creation_callback_receives_blueprint(): void
-    {
-        TestModel::$create = fn ($blueprint) => Assert::assertInstanceOf(Blueprint::class, $blueprint);
-
-        $this->schema->expects('create')->withArgs(function ($table, $callback) {
-            $callback(m::mock(Blueprint::class));
-
-            return true;
-        })->andReturnSelf();
-
-        TestModel::migration()->up();
-    }
-
-    public function test_creates_table_with_custom_connection(): void
-    {
-        $this->expectNotToPerformAssertions();
-
-        try {
-            m::close();
-        } catch (Throwable) {
-            // ...
-        }
-
-        TestModel::customize(fn ($model) => $model->setConnection('bar'));
-
-        $this->schema = $this->container->instance('db.schema', m::mock(SchemaBuilder::class));
-        $this->resolver = $this->container->instance('db', m::mock(ConnectionResolverInterface::class));
-        $this->connection = $this->container->instance('db.connection', m::mock(Connection::class));
-
-        $this->resolver->expects('connection')->with(null)->never();
-        $this->resolver->expects('connection')->once()->with('bar')->andReturn($this->connection);
-        $this->schema->expects('setConnection')->andReturnSelf();
-
-        $this->schema->expects('create')->andReturnSelf();
-
-        TestModel::setConnectionResolver($this->resolver);
-
-        TestModel::migration()->up();
-    }
-
-    public function test_creates_table_using_default_model_name(): void
-    {
-        $this->schema->expects('create')->withArgs(function (string $table): bool {
-            static::assertSame('test_customizable_model_with_migrations', $table);
-            return true;
-        });
-
-        TestModel::migration()->up();
-    }
-
-    public function test_creates_table_with_custom_table_name(): void
-    {
-        TestModel::customize(fn ($model) => $model->setTable('foo'));
-
-        $this->schema->expects('create')->withArgs(function (string $table): bool {
-            static::assertSame('foo', $table);
-            return true;
-        });
-
-        TestModel::migration()->up();
     }
 
     public function test_creates_columns_bypasses_callback(): void
@@ -117,13 +55,13 @@ class CustomMigrationTest extends TestCase
         $blueprint->expects('createCall')->once();
 
         $this->schema->expects('create')->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-            static::assertSame('test_customizable_model_with_migrations', $table);
+            static::assertSame('test_table', $table);
             $closure($blueprint);
 
             return true;
         });
 
-        TestModel::migration()->with(fn($table) => $table->createCall())->up();
+        (new CustomMigration($this->model, fn() => true))->with(fn($table) => $table->createCall())->up();
     }
 
     public function test_morphs_throws_if_called_twice(): void
@@ -145,12 +83,12 @@ class CustomMigrationTest extends TestCase
             }
         );
 
-        TestModel::$create = function ($table) {
+        $migration = (new CustomMigration($this->model, function ($table) {
             $this->createMorph($table, 'foo');
             $this->createMorph($table, 'foo');
-        };
+        }));
 
-        TestModel::migration()->up();
+        $migration->up();
 
         $this->expectException(BadMethodCallException::class);
         $this->expectExceptionMessage('Using multiple customizable morph calls is unsupported.');
@@ -177,12 +115,12 @@ class CustomMigrationTest extends TestCase
             }
         );
 
-        TestModel::$create = function (Blueprint $table): void {
+        $migration = (new CustomMigration($this->model, function (Blueprint $table): void {
             $this->createNullableMorph($table, 'foo');
             $this->createNullableMorph($table, 'foo');
-        };
+        }));
 
-        TestModel::migration()->up();
+        $migration->up();
 
         $this->expectException(BadMethodCallException::class);
         $this->expectExceptionMessage('Using multiple customizable morph calls is unsupported.');
@@ -214,7 +152,7 @@ class CustomMigrationTest extends TestCase
     #[DataProvider('useMigrations')]
     public function morphs_default_from_builder(Closure $migration, ?string $index): void
     {
-        TestModel::$create = $migration;
+        $this->expectNotToPerformAssertions();
 
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('createCall')->once();
@@ -223,20 +161,19 @@ class CustomMigrationTest extends TestCase
 
         $this->schema->expects('create')->once()
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-                static::assertSame('test_customizable_model_with_migrations', $table);
                 $closure($blueprint);
 
                 return true;
             });
 
-        TestModel::migration()->up();
+        (new CustomMigration($this->model, $migration))->up();
     }
 
     #[Test]
     #[DataProvider('useMigrations')]
     public function morphs_to_numeric(Closure $migration, ?string $index): void
     {
-        TestModel::$create = $migration;
+        $this->expectNotToPerformAssertions();
 
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('createCall')->times(3);
@@ -245,28 +182,23 @@ class CustomMigrationTest extends TestCase
         $blueprint->expects('numericMorphs')->with('foo', 'test_index')->once();
         $blueprint->expects('nullableNumericMorphs')->with('bar', 'test_index')->once();
 
-        $this->resolver->expects('connection')->with(null)->times(2)->andReturn($this->connection);
-        $this->schema->expects('setConnection')->times(2)->andReturnSelf();
-
         $this->schema->expects('create')->times(3)
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-                static::assertSame('test_customizable_model_with_migrations', $table);
-
                 $closure($blueprint);
 
                 return true;
             });
 
-        TestModel::migration()->morphNumeric->up();
-        TestModel::migration()->morph('numeric')->up();
-        TestModel::migration()->morph('numeric', 'test_index')->up();
+        (new CustomMigration($this->model, $migration))->morphNumeric->up();
+        (new CustomMigration($this->model, $migration))->morph('numeric')->up();
+        (new CustomMigration($this->model, $migration))->morph('numeric', 'test_index')->up();
     }
 
     #[Test]
     #[DataProvider('useMigrations')]
     public function morphs_to_uuid(Closure $migration, ?string $index): void
     {
-        TestModel::$create = $migration;
+        $this->expectNotToPerformAssertions();
 
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('createCall')->times(3);
@@ -275,27 +207,23 @@ class CustomMigrationTest extends TestCase
         $blueprint->expects('uuidMorphs')->with('foo', 'test_index')->once();
         $blueprint->expects('nullableUuidMorphs')->with('bar', 'test_index')->once();
 
-        $this->resolver->expects('connection')->with(null)->times(2)->andReturn($this->connection);
-        $this->schema->expects('setConnection')->times(2)->andReturnSelf();
-
         $this->schema->expects('create')->times(3)
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-                static::assertSame('test_customizable_model_with_migrations', $table);
                 $closure($blueprint);
 
                 return true;
             });
 
-        TestModel::migration()->morphUuid->up();
-        TestModel::migration()->morph('uuid')->up();
-        TestModel::migration()->morph('uuid', 'test_index')->up();
+        (new CustomMigration($this->model, $migration))->morphUuid->up();
+        (new CustomMigration($this->model, $migration))->morph('uuid')->up();
+        (new CustomMigration($this->model, $migration))->morph('uuid', 'test_index')->up();
     }
 
     #[Test]
     #[DataProvider('useMigrations')]
     public function morphs_to_ulid(Closure $migration, ?string $index): void
     {
-        TestModel::$create = $migration;
+        $this->expectNotToPerformAssertions();
 
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('createCall')->times(3);
@@ -304,24 +232,22 @@ class CustomMigrationTest extends TestCase
         $blueprint->expects('ulidMorphs')->with('foo', 'test_index')->once();
         $blueprint->expects('nullableUlidMorphs')->with('bar', 'test_index')->once();
 
-        $this->resolver->expects('connection')->with(null)->times(2)->andReturn($this->connection);
-        $this->schema->expects('setConnection')->times(2)->andReturnSelf();
-
         $this->schema->expects('create')->times(3)
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-                static::assertSame('test_customizable_model_with_migrations', $table);
                 $closure($blueprint);
 
                 return true;
             });
 
-        TestModel::migration()->morphUlid->up();
-        TestModel::migration()->morph('ulid')->up();
-        TestModel::migration()->morph('ulid', 'test_index')->up();
+        (new CustomMigration($this->model, $migration))->morphUlid->up();
+        (new CustomMigration($this->model, $migration))->morph('ulid')->up();
+        (new CustomMigration($this->model, $migration))->morph('ulid', 'test_index')->up();
     }
 
     public function test_calls_after_up(): void
     {
+        $this->expectNotToPerformAssertions();
+
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('firstCall')->once();
         $blueprint->expects('secondCall')->once();
@@ -330,13 +256,12 @@ class CustomMigrationTest extends TestCase
         $this->schema->expects('create')->once();
         $this->schema->expects('table')->times(3)
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-            static::assertSame('test_customizable_model_with_migrations', $table);
-            $closure($blueprint);
+                $closure($blueprint);
 
-            return true;
-        });
+                return true;
+            });
 
-        TestModel::migration()
+        (new CustomMigration($this->model, fn() => true))
             ->afterUp(fn($table) => $table->firstCall())
             ->afterUp(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
             ->up();
@@ -346,13 +271,15 @@ class CustomMigrationTest extends TestCase
     {
         $this->expectNotToPerformAssertions();
 
-        $this->schema->expects('dropIfExists')->with('test_customizable_model_with_migrations')->once();
+        $this->schema->expects('dropIfExists')->with('test_table')->once();
 
-        TestModel::migration()->down();
+        (new CustomMigration($this->model, fn() => true))->down();
     }
 
     public function test_calls_before_down(): void
     {
+        $this->expectNotToPerformAssertions();
+
         $blueprint = m::mock(Blueprint::class);
         $blueprint->expects('firstCall')->once();
         $blueprint->expects('secondCall')->once();
@@ -360,15 +287,14 @@ class CustomMigrationTest extends TestCase
 
         $this->schema->expects('table')->times(3)
             ->withArgs(function (string $table, Closure $closure) use ($blueprint): bool {
-                static::assertSame('test_customizable_model_with_migrations', $table);
                 $closure($blueprint);
 
                 return true;
             });
 
-        $this->schema->expects('dropIfExists')->with('test_customizable_model_with_migrations')->once();
+        $this->schema->expects('dropIfExists')->with('test_table')->once();
 
-        TestModel::migration()
+        (new CustomMigration($this->model, fn() => true))
             ->beforeDown(fn($table) => $table->firstCall())
             ->beforeDown(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
             ->down();

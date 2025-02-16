@@ -14,6 +14,7 @@ use function array_push;
 use function data_get;
 use function debug_backtrace;
 use function is_string;
+use function method_exists;
 use function sprintf;
 use function strtolower;
 use const DEBUG_BACKTRACE_IGNORE_ARGS;
@@ -178,10 +179,9 @@ class CustomMigration extends Migration
     {
         $container = Container::getInstance();
 
-        /** @var \Illuminate\Database\Schema\Builder $builder */
-        $builder = $container->make($container->bound('db.schema') ? 'db.schema' : Builder::class);
-
-        return $builder->setConnection($this->model->getConnection());
+        return method_exists(Builder::class, 'setConnection')
+            ? $container->make(Builder::class)->setConnection($this->model->getConnection())
+            : $container->make(Builder::class, ['connection' => $this->model->getConnection()]);
     }
 
     /**
