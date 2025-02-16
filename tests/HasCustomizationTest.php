@@ -51,7 +51,7 @@ class HasCustomizationTest extends TestCase
 
     public function test_creates_guesses_name_from_caller_and_instances_it(): void
     {
-        $migration = TestCustomizableModel::migration();
+        $migration = TestCustomizableModel::migrationGuess();
 
         $reflection = new ReflectionClass($migration);
 
@@ -94,7 +94,7 @@ class TestCustomizableModel extends Model
 
     public static $instance;
 
-    public static function migration()
+    public static function migrationGuess()
     {
         return CustomMigration::create(fn() => true);
     }
