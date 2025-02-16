@@ -117,9 +117,9 @@ $car = Car::find(1);
 $owners = $car->owner; // App/Models/Company or App/Models/Person
 ```
 
-You may find yourself with models a given primary key type, but the package migration using morphs for the other type. For example, your `Company` or `Person` models using UUID, while the migration morph type uses integers.
+You may find yourself with youur models using a primary key type, different to the type used by the library models. For example, your `Company` or `Person` models using UUID, while the migration morph type uses integers.
 
-If that's your case, you can change the morph type with the `morph...` property access (preferably), or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large ones).
+If that's your case, you can change the library morph type with the `morph...` property access (preferably), or the `morph()` method with `numeric`, `uuid` or `ulid` if you need to also set an index name (in case your database engine doesn't play nice with large ones).
 
 For example, you can change the morph type of the `Car` migration to match the UUID type for the `Company` and `Person` models.
 
