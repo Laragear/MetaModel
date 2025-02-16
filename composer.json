@@ -25,10 +25,11 @@
     },
     "require": {
         "php": "^8.2",
+        "illuminate/contracts": "11.*|12.*",
+        "illuminate/container": "11.*|12.*",
         "illuminate/database": "11.*|12.*"
     },
     "require-dev": {
-        "ext-pdo": "*",
         "phpunit/phpunit": "11.*|12.*",
         "mockery/mockery": "^1.6"
     },
