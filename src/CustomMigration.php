@@ -179,7 +179,7 @@ class CustomMigration extends Migration
     {
         $container = Container::getInstance();
 
-        return method_exists(Builder::class, 'setConnection')
+        return method_exists(Builder::class, 'setConnection') // @phpstan-ignore-line
             ? $container->make(Builder::class)->setConnection($this->model->getConnection())
             : $container->make(Builder::class, ['connection' => $this->model->getConnection()]);
     }
