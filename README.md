@@ -18,13 +18,13 @@ class MyPackageModel extends Model
 {
     use HasCustomization;
     
-    protected static function migration(): string
+    protected static function migration(): CustomMigration
     {
-        return new CustomMigration(function (Blueprint $table) {
+        return CustomMigration::create(function (Blueprint $table) {
             $table->id();
             $table->string('title');
             $table->timestamps();
-        })
+        });
     }
 }
 ```
@@ -113,7 +113,7 @@ class Car extends Model
     
     public static function migration(): CustomMigration
     {
-        return new CustomMigration(function (Blueprint $table) {
+        return CustomMigration::create(function (Blueprint $table) {
             $table->id();
             $table->string('title');
             $table->timestamps();
