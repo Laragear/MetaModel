@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check file permissions
         run: |
@@ -50,18 +50,14 @@ jobs:
     strategy:
       matrix:
         php-version:
-          - 8.2
-          - 8.3
           - 8.4
+          - 8.5
         laravel-constraint:
-          - 11.*
           - 12.*
+          - 13.*
         dependencies:
           - lowest
           - highest
-        exclude:
-          - php-version: 8.2
-            laravel-constraint: 12.*
 
     steps:
       - name: Set up PHP

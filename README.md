@@ -4,11 +4,13 @@
 [![codecov](https://codecov.io/gh/Laragear/MetaModel/graph/badge.svg?token=fF74Rp0uWn)](https://codecov.io/gh/Laragear/MetaModel)
 [![Maintainability](https://qlty.sh/badges/0678bc7e-7900-4e17-9038-ccc0e8fb2b56/maintainability.svg)](https://qlty.sh/gh/Laragear/projects/MetaModel)
 [![Sonarcloud Status](https://sonarcloud.io/api/project_badges/measure?project=Laragear_MetaModel&metric=alert_status)](https://sonarcloud.io/dashboard?id=Laragear_MetaModel)
-[![Laravel Octane Compatibility](https://img.shields.io/badge/Laravel%20Octane-Compatible-success?style=flat&logo=laravel)](https://laravel.com/docs/11.x/octane#introduction)
+[![Laravel Octane Compatibility](https://img.shields.io/badge/Laravel%20Octane-Compatible-success?style=flat&logo=laravel)](https://laravel.com/docs/13.x/octane#introduction)
 
 Let other developers customize your package model and migrations.
 
 ```php
+namespace Vendor\Package\Models;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Laragear\MetaModel\CustomMigration;
@@ -20,7 +22,7 @@ class MyPackageModel extends Model
     
     protected static function migration(): string
     {
-        return new CustomMigration(function (Blueprint $table) {
+        return CustomMigration::make(function (Blueprint $table) {
             $table->id();
             $table->string('title');
             $table->timestamps();
@@ -41,7 +43,8 @@ Your support allows me to keep this package free, up-to-date and maintainable. A
 
 ## Requirements
 
-- Laravel 11 or later
+- PHP 8.3 or later
+- Laravel 12 or later
 
 ## Installation
 
@@ -53,15 +56,13 @@ composer require laragear/meta-model
 
 ## Customizing models
 
-When you create a model in your package, most of the time, your end-developers won't be able to modify it unless they create a repository that manually creates a model. Instead, you can add the `HasCustomization` trait to your model and let the developer modify the model when is instanced.
-
+When you create a model in your package, your end-developers won't be able to modify it unless they create a repository that manually creates a model, which is cumbersome. Instead, you can add the `HasCustomization` trait to your model and let the developer modify the model when is instanced with a simple callback.
 
 ```php
 namespace Vendor\Package\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Laragear\MetaModel\HasCustomization;
-use Vendor\Package\Migrations\CarMigration;
 
 class Car extends Model
 {
@@ -73,19 +74,19 @@ class Car extends Model
 
 > [!TIP]
 > 
-> The trait is marked as "internal" to avoid appearing on your IDE.
+> The trait methods are marked as "internal" to avoid appearing on the end-developer IDE.
 
-From there, the end-developer can customize the model by setting a callback to the `customize()` method, that receives the model instance. For example, you may do this in your `bootstrap/app.php` through the `booted()` method.
+From there, the end-developer can customize the model by setting a callback to the `customize()` method. The callback  receives the model instance. For example, they can do this in the `bootstrap/app.php` file, through the `booted()` method.
 
 ```php
-use Vendor\Package\Models\PackageModel;
+use Vendor\Package\Models\Car;
 
 use Illuminate\Foundation\Application;
 
 return Application::booted(function () {
 
-    PackageModel::customize(function ($model) {
-        $model->setTable('my_custom_table');
+    Car::customize(function ($model) {
+        $model->setTable('vendor_cars');
         $model->setConnection('read-database');
     });
     
@@ -94,14 +95,14 @@ return Application::booted(function () {
 
 ## Custom Migration
 
-You may use the `migration()` method of the trait to create a hands-off migration that can only be extended. This is a great way to let the developer with an immutable table, but allow them to add columns or change the primary model type for.
+You may use the `makeMigrations()` method of the trait to create an already-made migration. In other words, the end-developers receive a working migration that can modify or extend at their leisure.
 
-The `Laragear\MetaModel\CustomMigration` class can be created using the `create()` method. It receives a callback that will be used to create the table. The table name is retrieved automatically from the Model, and it will be automatically dropped when invoking `down()`.
+Simply use the `make()` method of the `Laragear\MetaModel\CustomMigration` class with a callback to create the table. The table name is retrieved automatically from the Model `getTable()` method, and it will be correctly dropped when invoking `down()` later in the migration file.
 
 ```php
-namespace MyVendor\MyPackage\Models;
+namespace Vendor\Package\Models;
 
-use Closure;use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Laragear\MetaModel\CustomMigration;
 use Laragear\MetaModel\HasCustomization;
@@ -111,9 +112,9 @@ class Car extends Model
 {
     use HasCustomization;
     
-    public static function migration(): CustomMigration
+    public static function makeMigrations(): CustomMigration|array
     {
-        return new CustomMigration(function (Blueprint $table) {
+        return CustomMigration::make(function (Blueprint $table) {
             $table->id();
             $table->string('title');
             $table->timestamps();
@@ -124,24 +125,69 @@ class Car extends Model
 
 > [!TIP]
 > 
-> The callback `$this` is bound to the `CustomMigration` instance, not the model.
+> Inside the callback, `$this` is bound to the `CustomMigration` instance, not the model.
 
-Once then, we can create the migration file `0000_00_00_000000_create_cars_table.php`. Instead of returning a class that extends the default Laravel migration, we use our model and the `migration()` method.
+Once done, create the migration file, like `0000_00_00_000000_create_cars_table.php`. Instead of returning a class that extends the default Laravel migration, we use our model and the `migration()` method.
 
 ```php
 // database/migrations/0000_00_00_000000_create_cars_table.php
-
-use MyVendor\MyPackage\Models\Car;
-use Illuminate\Database\Schema\Blueprint;
+use Vendor\Package\Models\Car;
 
 return Car::migration();
+```
+
+### Multiple migrations
+
+If you require to handle multiple migrations for a model, simple return an `array` of migrations, and separate each Custom migration using the `table` argument. This is not necessary for the default migration, only for the additional ones.
+
+```php
+namespace Vendor\Package\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
+use Laragear\MetaModel\CustomMigration;
+use Laragear\MetaModel\HasCustomization;
+use MyVendor\MyPackage\Models\Car;
+
+class Car extends Model
+{
+    use HasCustomization;
+    
+    public static function makeMigrations(): CustomMigration|array
+    {
+        return [
+            CustomMigration::make(function (Blueprint $table) {
+                // ...
+            }),
+            CustomMigration::make(function (Blueprint $table) {
+                // ...
+            }, table: 'car_repairs'),
+        ];
+    }
+}
+```
+
+To return a non-default migration, simply use the `migration()` method with the respective table name. If no name is issued, the "default" migration (that uses the Model defined table) will be returned. 
+
+```php
+// database/migrations/0000_00_00_000000_create_cars_table.php
+use MyVendor\MyPackage\Models\Car;
+
+return Car::migration();
+```
+
+```php
+// database/migrations/0000_00_00_000000_create_car_repairs_table.php
+use MyVendor\MyPackage\Models\Car;
+
+return Car::migration('car_repairs');
 ```
 
 ### Morphs
 
 > [!CAUTION]
 > 
-> Morphs are only supported for a single relation. Multiple morphs relations on a single table is highly discouraged. 
+> Morphs are only supported for a single relation. Multiple morphs relations on a single table is **highly discouraged**. 
 
 If your migration requires morph relationships, you will find that end-developers won't always have the same key type in their application to associate with. This problem can be fixed by using the `createMorph()` or `createNullableMorph()` method with the `Blueprint` instance and the name of the morph type.
 
@@ -150,7 +196,7 @@ use Laragear\MetaModel\CustomMigration;
 
 public static function migration(): CustomMigration
 {
-    return new CustomMigration(function (Blueprint $table) {
+    return CustomMigration::make(function (Blueprint $table) {
         $table->id();
         
         $this->createMorph($table, 'ownable');
@@ -167,21 +213,22 @@ public static function migration(): CustomMigration
 This will let the end-developer to change the morph type through the `morph()` method if needed. For example, if he's using ULID morphs for the target models, he may set it in one line:
 
 ```php
-use MyVendor\MyPackage\Models\Car;
+// database/migrations/0000_00_00_000000_create_cars_table.php
+use Vendor\Package\Models\Car;
 
 return Car::migration()->morph('ulid', 'custom_index_name');
 ```
 
 #### Default index name
 
-You may also set a custom index name for the morph. It will be used as a default, unless the user overrides it manually.
+You may also set a custom index name for the morph. It will be used as a default, unless the end-developer overrides it manually.
 
 ```php
 use Laragear\MetaModel\CustomMigration;
 
 public static function migration(): CustomMigration
 {
-    return new CustomMigration(function (Blueprint $table) {
+    return CustomMigration::make(function (Blueprint $table) {
         // ...
         
         $this->createMorphRelation($table, 'ownable', 'ownable_table_index');
@@ -190,7 +237,8 @@ public static function migration(): CustomMigration
 ```
 
 ```php
-use MyVendor\MyPackage\Models\Car;
+// database/migrations/0000_00_00_000000_create_cars_table.php
+use Vendor\Package\Models\Car;
 
 // Uses "custom_index_name" as index name
 return Car::migration()->morph('ulid', 'custom_index_name');
@@ -201,7 +249,7 @@ return Car::migration()->morph('ulid');
 
 ### After Up & Before Down
 
-An end-developer can execute logic after the table is created, and before the table is dropped, using the `afterUp()` and `beforeDown()` methods, respectively. This allows the developer to run enhance the table, or avoid failing migrations.
+An end-developer can execute logic after the table is created, and before the table is dropped, using the `afterUp()` and `beforeDown()` methods, respectively. This allows the developer to run enhance the table, or avoid failing migrations due to dependencies (like linked columns, views or else). 
 
 For example, the end-developer can use these methods to create foreign column references, and remove them before dropping the table.
 
@@ -224,9 +272,9 @@ return Car::migration()
 
 ## Package documentation
 
-If you plan to add this to your package, you may also want to copy-and-paste the [DATABASE.md](DATABASE.md) file in your package. This way developers will know how to use your model and migrations. Alternatively, you may also just copy its contents, or link back to this repository.
+If you plan to add migrations to your package, you may also want to copy-and-paste the [DATABASE.md](DATABASE.md) file in your package root. This way developers will know how to use your model and migrations. Alternatively, you may also just copy its contents, or link back to this repository.
 
-You may execute this from your project root:
+For convenience, you may execute this from your project root:
 
 ```shell
 cp vendor/laragear/meta-model/DATABASE.md ./DATABASE.md

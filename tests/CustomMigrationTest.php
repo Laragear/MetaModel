@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use Laragear\MetaModel\CustomMigration;
+use Laragear\MetaModel\HasCustomization;
 use Mockery as m;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -37,17 +38,19 @@ class CustomMigrationTest extends TestCase
         $this->container = Container::setInstance(m::mock(Container::class));
         $this->container->expects('make')->withArgs(function (string $class) {
             return $class === Builder::class;
-        })->atLeast()->once()->andReturn($this->schema);
+        })->zeroOrMoreTimes()->andReturn($this->schema);
 
         $this->model = m::mock(Model::class);
-        $this->model->expects('getTable')->atLeast()->once()->andReturn('test_table');
-        $this->model->expects('getConnection')->atLeast()->once()->andReturn(m::mock(Connection::class));
+        $this->model->expects('getTable')->zeroOrMoreTimes()->andReturn('test_table');
+        $this->model->expects('getConnectionName')->zeroOrMoreTimes()->andReturn('test_connection');
+        $this->model->expects('getConnection')->zeroOrMoreTimes()->andReturn(m::mock(Connection::class));
     }
 
     protected function tearDown(): void
     {
-        m::close();
         Container::setInstance();
+
+        m::close();
     }
 
     public function test_creates_columns_bypasses_callback(): void
@@ -62,7 +65,7 @@ class CustomMigrationTest extends TestCase
             return true;
         });
 
-        (new CustomMigration($this->model, fn() => true))->with(fn($table) => $table->createCall())->up();
+        CustomMigration::make(fn() => true, $this->model)->with(fn($table) => $table->createCall())->up();
     }
 
     public function test_morphs_throws_if_called_twice(): void
@@ -81,13 +84,13 @@ class CustomMigrationTest extends TestCase
                 }
 
                 return true;
-            }
+            },
         );
 
-        $migration = (new CustomMigration($this->model, function ($table) {
+        $migration = CustomMigration::make(function ($table) {
             $this->createMorph($table, 'foo');
             $this->createMorph($table, 'foo');
-        }));
+        }, $this->model);
 
         $migration->up();
 
@@ -113,13 +116,13 @@ class CustomMigrationTest extends TestCase
                 }
 
                 return true;
-            }
+            },
         );
 
-        $migration = (new CustomMigration($this->model, function (Blueprint $table): void {
+        $migration = CustomMigration::make(function ($table) {
             $this->createNullableMorph($table, 'foo');
             $this->createNullableMorph($table, 'foo');
-        }));
+        }, $this->model);
 
         $migration->up();
 
@@ -129,7 +132,7 @@ class CustomMigrationTest extends TestCase
         throw $exception;
     }
 
-    public static function useMigrations(): array
+    public static function providesMigrationCallbacks(): array
     {
         return [
             ['migration' => function (Blueprint $table) {
@@ -150,7 +153,7 @@ class CustomMigrationTest extends TestCase
     }
 
     #[Test]
-    #[DataProvider('useMigrations')]
+    #[DataProvider('providesMigrationCallbacks')]
     public function morphs_default_from_builder(Closure $migration, ?string $index): void
     {
         $this->expectNotToPerformAssertions();
@@ -167,11 +170,11 @@ class CustomMigrationTest extends TestCase
                 return true;
             });
 
-        (new CustomMigration($this->model, $migration))->up();
+        CustomMigration::make($migration, $this->model)->up();
     }
 
     #[Test]
-    #[DataProvider('useMigrations')]
+    #[DataProvider('providesMigrationCallbacks')]
     public function morphs_to_numeric(Closure $migration, ?string $index): void
     {
         $this->expectNotToPerformAssertions();
@@ -190,13 +193,13 @@ class CustomMigrationTest extends TestCase
                 return true;
             });
 
-        (new CustomMigration($this->model, $migration))->morphNumeric->up();
-        (new CustomMigration($this->model, $migration))->morph('numeric')->up();
-        (new CustomMigration($this->model, $migration))->morph('numeric', 'test_index')->up();
+        CustomMigration::make($migration, $this->model)->morphNumeric->up();
+        CustomMigration::make($migration, $this->model)->morph('numeric')->up();
+        CustomMigration::make($migration, $this->model)->morph('numeric', 'test_index')->up();
     }
 
     #[Test]
-    #[DataProvider('useMigrations')]
+    #[DataProvider('providesMigrationCallbacks')]
     public function morphs_to_uuid(Closure $migration, ?string $index): void
     {
         $this->expectNotToPerformAssertions();
@@ -215,13 +218,13 @@ class CustomMigrationTest extends TestCase
                 return true;
             });
 
-        (new CustomMigration($this->model, $migration))->morphUuid->up();
-        (new CustomMigration($this->model, $migration))->morph('uuid')->up();
-        (new CustomMigration($this->model, $migration))->morph('uuid', 'test_index')->up();
+        CustomMigration::make($migration, $this->model)->morphUuid->up();
+        CustomMigration::make($migration, $this->model)->morph('uuid')->up();
+        CustomMigration::make($migration, $this->model)->morph('uuid', 'test_index')->up();
     }
 
     #[Test]
-    #[DataProvider('useMigrations')]
+    #[DataProvider('providesMigrationCallbacks')]
     public function morphs_to_ulid(Closure $migration, ?string $index): void
     {
         $this->expectNotToPerformAssertions();
@@ -240,9 +243,9 @@ class CustomMigrationTest extends TestCase
                 return true;
             });
 
-        (new CustomMigration($this->model, $migration))->morphUlid->up();
-        (new CustomMigration($this->model, $migration))->morph('ulid')->up();
-        (new CustomMigration($this->model, $migration))->morph('ulid', 'test_index')->up();
+        CustomMigration::make($migration, $this->model)->morphUlid->up();
+        CustomMigration::make($migration, $this->model)->morph('ulid')->up();
+        CustomMigration::make($migration, $this->model)->morph('ulid', 'test_index')->up();
     }
 
     public function test_calls_after_up(): void
@@ -262,7 +265,7 @@ class CustomMigrationTest extends TestCase
                 return true;
             });
 
-        (new CustomMigration($this->model, fn() => true))
+        CustomMigration::make(fn() => true, $this->model)
             ->afterUp(fn($table) => $table->firstCall())
             ->afterUp(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
             ->up();
@@ -274,7 +277,7 @@ class CustomMigrationTest extends TestCase
 
         $this->schema->expects('dropIfExists')->with('test_table')->once();
 
-        (new CustomMigration($this->model, fn() => true))->down();
+        CustomMigration::make(fn() => true, $this->model)->down();
     }
 
     public function test_calls_before_down(): void
@@ -295,7 +298,7 @@ class CustomMigrationTest extends TestCase
 
         $this->schema->expects('dropIfExists')->with('test_table')->once();
 
-        (new CustomMigration($this->model, fn() => true))
+        CustomMigration::make(fn() => true, $this->model)
             ->beforeDown(fn($table) => $table->firstCall())
             ->beforeDown(fn($table) => $table->secondCall(), fn($table) => $table->thirdCall())
             ->down();

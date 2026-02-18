@@ -11,6 +11,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use function array_push;
+use function class_exists;
 use function data_get;
 use function debug_backtrace;
 use function is_string;
@@ -29,13 +30,6 @@ use const DEBUG_BACKTRACE_IGNORE_ARGS;
 class CustomMigration extends Migration
 {
     /**
-     * The table to use for the migration.
-     *
-     * @var string
-     */
-    protected string $table;
-
-    /**
      * Create a new Customizable Migration instance.
      *
      * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)|null  $create
@@ -45,7 +39,8 @@ class CustomMigration extends Migration
      * @param  "numeric"|"uuid"|"ulid"|""  $morphType
      */
     public function __construct(
-        protected Model $model,
+        ?string $connection,
+        public string $table = '',
         protected ?Closure $create = null,
         protected array $with = [],
         protected array $afterUp = [],
@@ -55,7 +50,9 @@ class CustomMigration extends Migration
         protected bool $morphCalled = false,
     )
     {
-        $this->table = $model->getTable();
+        if ($connection) {
+            $this->connection = $connection;
+        }
     }
 
     /**
@@ -179,9 +176,9 @@ class CustomMigration extends Migration
     {
         $container = Container::getInstance();
 
-        return method_exists(Builder::class, 'setConnection') // @phpstan-ignore-line
-            ? $container->make(Builder::class)->setConnection($this->model->getConnection())
-            : $container->make(Builder::class, ['connection' => $this->model->getConnection()]);
+        return method_exists(Builder::class, 'setConnection')
+            ? $container->make(Builder::class)->setConnection($this->connection) // @phpstan-ignore-line
+            : $container->make(Builder::class, ['connection' => $this->connection]);
     }
 
     /**
@@ -227,23 +224,42 @@ class CustomMigration extends Migration
     }
 
     /**
-     * Create a new customizable migration for an external model.
+     * Create new customizable migration for an external model.
+     *
+     * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)  $create
+     * @param  \Illuminate\Database\Eloquent\Model|class-string<\Illuminate\Database\Eloquent\Model>|null  $model
+     * @return static
+     *
+     * @deprecated Use `make` instead
+     * @see static::make()
+     */
+    public static function create(Closure $create, Model|string|null $model = null): static
+    {
+        return static::make(...func_get_args());
+    }
+
+    /**
+     * Create new customizable migration for an external model.
      *
      * @param  (\Closure(\Illuminate\Database\Schema\Blueprint):void)  $create
      * @param  \Illuminate\Database\Eloquent\Model|class-string<\Illuminate\Database\Eloquent\Model>|null  $model
      * @return static
      */
-    public static function create(Closure $create, Model|string|null $model = null): static
+    public static function make(Closure $create, Model|string|null $model = null, ?string $connection = null): static
     {
         // If the developer didn't set the model, we will find its name using a debug backtrace.
         if (!$model) {
-            $model = data_get(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2), '1.class');
+            $model = data_get(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3), '1.class');
         }
 
-        if (is_string($model)) {
-            $model = new $model;
+        if (class_exists($model)) {
+            $model = new $model();
         }
 
-        return new static($model, $create);
+        if ($model instanceof Model) {
+            return new static($connection ?? $model->getConnectionName(), $model->getTable(), $create);
+        }
+
+        return new static($connection, $model, $create);
     }
 }
